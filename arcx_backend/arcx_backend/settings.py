@@ -41,8 +41,7 @@ INSTALLED_APPS = [
     # Add your nested app here
     'core',
     #phase 3 dependencies
-    "django.contrib.contenttypes",
-    "django.contrib.auth",
+
     "rest_framework",
     "rest_framework_simplejwt",
     "arcx_core",
