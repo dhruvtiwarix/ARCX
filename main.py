@@ -7,11 +7,11 @@ Run: python main.py
 """
 
 from colorama import init, Fore, Style
-from domain.oracle import MultiSourceOracle
-from domain.valuation import ValuationEngine
-from domain.dividend import DividendAccrualEngine
-from domain.rebalancer import DriftRebalancer
-from domain.nav_report import NAVReportGenerator
+from arcx_backend.domain.oracle import MultiSourceOracle
+from arcx_backend.domain.valuation import ValuationEngine
+from arcx_backend.domain.dividend import DividendAccrualEngine
+from arcx_backend.domain.rebalancer import DriftRebalancer
+from arcx_backend.domain.nav_report import NAVReportGenerator
 
 init(autoreset=True)
 

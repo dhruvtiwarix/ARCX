@@ -9,10 +9,10 @@ Run with: python -m pytest tests/ -v
 
 import pytest
 from datetime import datetime
-from domain.oracle import MarketPrices
-from domain.valuation import ValuationEngine, GenesisVault
-from domain.dividend import DividendAccrualEngine, ANNUAL_YIELDS, WEIGHTS, DAYS_IN_YEAR
-from domain.rebalancer import DriftRebalancer, DRIFT_TOLERANCE
+from arcx_backend.domain.oracle import MarketPrices
+from arcx_backend.domain.valuation import ValuationEngine, GenesisVault
+from arcx_backend.domain.dividend import DividendAccrualEngine, ANNUAL_YIELDS, WEIGHTS, DAYS_IN_YEAR
+from arcx_backend.domain.rebalancer import DriftRebalancer, DRIFT_TOLERANCE
 
 MOCK_PRICES = MarketPrices(
     spy=530.00, tlt=95.00, gld=185.00, usd_inr=83.50,

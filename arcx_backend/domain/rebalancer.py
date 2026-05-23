@@ -24,7 +24,7 @@ How It Works:
 
 from dataclasses import dataclass, field
 from typing import List
-from domain.oracle import MarketPrices
+from arcx_backend.domain.oracle import MarketPrices
 
 # ── Target Allocation ─────────────────────────────────────────────────────────
 TARGET_WEIGHTS = {

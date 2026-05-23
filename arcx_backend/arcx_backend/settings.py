@@ -10,19 +10,19 @@ For the full list of settings and their values, see
 https://docs.djangoproject.com/en/5.2/ref/settings/
 """
 import os
-from datetime import timedelta
-from dotenv import load_dotenv
 from pathlib import Path
+from dotenv import load_dotenv
+from datetime import timedelta
 
-# Build paths inside the project like this: BASE_DIR / 'subdir'.
+# 1. Define the BASE_DIR (which points to the folder containing manage.py)
 BASE_DIR = Path(__file__).resolve().parent.parent
 
+# 2. Force load_dotenv to look specifically inside BASE_DIR for your .env file
+load_dotenv(BASE_DIR / '.env')
 
-# Quick-start development settings - unsuitable for production
-# See https://docs.djangoproject.com/en/5.2/howto/deployment/checklist/
+# ... the rest of your settings.py stays the same ...
+SECRET_KEY = os.getenv("DJANGO_SECRET_KEY", "django-insecure-lr&(eza=fwaz=szk_$@5ei944vbzcz3s@%8a!65$d80$458$=+")
 
-# SECURITY WARNING: keep the secret key used in production secret!
-SECRET_KEY = 'django-insecure-lr&(eza=fwaz=szk_$@5ei944vbzcz3s@%8a!65$d80$458$=+'
 
 # SECURITY WARNING: don't run with debug turned on in production!
 DEBUG      = os.getenv("DEBUG", "False") == "True"
@@ -39,7 +39,6 @@ INSTALLED_APPS = [
     'django.contrib.messages',
     'django.contrib.staticfiles',
     # Add your nested app here
-    'core',
     #phase 3 dependencies
 
     "rest_framework",

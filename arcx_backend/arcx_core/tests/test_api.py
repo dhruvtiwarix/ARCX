@@ -92,7 +92,7 @@ class TestLivePriceEndpoint(TestCase):
  
     @patch("arcx_core.views.oracle_views.MultiSourceOracle")
     def test_oracle_failure_returns_503(self, MockOracle):
-        from domain.oracle import OracleFailureException
+        from arcx_backend.domain.oracle import OracleFailureException
         MockOracle.return_value.fetch_prices.side_effect = OracleFailureException("All sources down")
  
         response = self.client.get("/api/v1/oracle/price")
