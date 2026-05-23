@@ -9,7 +9,9 @@ https://docs.djangoproject.com/en/5.2/topics/settings/
 For the full list of settings and their values, see
 https://docs.djangoproject.com/en/5.2/ref/settings/
 """
-
+import os
+from datetime import timedelta
+from dotenv import load_dotenv
 from pathlib import Path
 
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
@@ -23,9 +25,8 @@ BASE_DIR = Path(__file__).resolve().parent.parent
 SECRET_KEY = 'django-insecure-lr&(eza=fwaz=szk_$@5ei944vbzcz3s@%8a!65$d80$458$=+'
 
 # SECURITY WARNING: don't run with debug turned on in production!
-DEBUG = True
-
-ALLOWED_HOSTS = []
+DEBUG      = os.getenv("DEBUG", "False") == "True"
+ALLOWED_HOSTS = os.getenv("ALLOWED_HOSTS", "localhost,127.0.0.1").split(",")
 
 
 # Application definition
@@ -39,6 +40,12 @@ INSTALLED_APPS = [
     'django.contrib.staticfiles',
     # Add your nested app here
     'core',
+    #phase 3 dependencies
+    "django.contrib.contenttypes",
+    "django.contrib.auth",
+    "rest_framework",
+    "rest_framework_simplejwt",
+    "arcx_core",
 ]
 
 MIDDLEWARE = [
@@ -49,6 +56,8 @@ MIDDLEWARE = [
     'django.contrib.auth.middleware.AuthenticationMiddleware',
     'django.contrib.messages.middleware.MessageMiddleware',
     'django.middleware.clickjacking.XFrameOptionsMiddleware',
+
+    "arcx_core.middleware.IdempotencyMiddleware",   # Phase 3 custom
 ]
 
 ROOT_URLCONF = 'arcx_backend.urls'
@@ -74,9 +83,6 @@ WSGI_APPLICATION = 'arcx_backend.wsgi.application'
 # Database
 # https://docs.djangoproject.com/en/5.2/ref/settings/#databases
 
-import os
-from dotenv import load_dotenv
-load_dotenv()
 
 DATABASES = {
     "default": {
@@ -94,6 +100,36 @@ DATABASES = {
     }
 }
 
+
+# ── Django REST Framework ─────────────────────────────────────────────────────
+REST_FRAMEWORK = {
+    # Every endpoint requires a valid JWT unless explicitly marked public
+    "DEFAULT_AUTHENTICATION_CLASSES": [
+        "rest_framework_simplejwt.authentication.JWTAuthentication",
+    ],
+    "DEFAULT_PERMISSION_CLASSES": [
+        "rest_framework.permissions.IsAuthenticated",
+    ],
+    # Consistent error shape everywhere: {"error": "...", "code": "..."}
+    "EXCEPTION_HANDLER": "arcx_core.exceptions.arcx_exception_handler",
+    # Decimal values must stay as strings in JSON — never floats
+    "COERCE_DECIMAL_TO_STRING": True,
+}
+ 
+# ── JWT Config ────────────────────────────────────────────────────────────────
+SIMPLE_JWT = {
+    "ACCESS_TOKEN_LIFETIME":  timedelta(minutes=30),
+    "REFRESH_TOKEN_LIFETIME": timedelta(days=7),
+    "ROTATE_REFRESH_TOKENS":  True,     # New refresh token on every use
+    "BLACKLIST_AFTER_ROTATION": False,  # Keep simple for Phase 3
+    "ALGORITHM": "HS256",
+    "AUTH_HEADER_TYPES": ("Bearer",),
+}
+ 
+DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
+USE_TZ = True
+TIME_ZONE = "UTC"
+ 
 
 # Password validation
 # https://docs.djangoproject.com/en/5.2/ref/settings/#auth-password-validators

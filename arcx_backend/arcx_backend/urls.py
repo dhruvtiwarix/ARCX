@@ -14,9 +14,48 @@ Including another URLconf
     1. Import the include() function: from django.urls import include, path
     2. Add a URL to urlpatterns:  path('blog/', include('blog.urls'))
 """
-from django.contrib import admin
+"""
+ARCX API URL Configuration — v1
+----------------------------------
+All routes live under /api/v1/ (mounted in arcx_backend/urls.py).
+
+Full endpoint map:
+  PUBLIC (no auth):
+    GET  /api/v1/oracle/price      → Live NAV + asset prices
+    GET  /api/v1/nav/history       → Historical NAV (price chart data)
+    GET  /api/v1/nav/today         → Today's published NAV with audit hash
+
+  AUTHENTICATED:
+    GET  /api/v1/wallet/           → Balance + unrealized P&L
+    GET  /api/v1/wallet/history    → Transaction history
+
+  AUTHENTICATED + KYC APPROVED:
+    POST /api/v1/wallet/deposit    → INR → ARCX  [Idempotency-Key required]
+    POST /api/v1/wallet/withdraw   → ARCX → INR  [Idempotency-Key required]
+    POST /api/v1/transfer/         → P2P ARCX    [Idempotency-Key required]
+
+  AUTH:
+    POST /api/auth/token/          → Get JWT tokens
+    POST /api/auth/token/refresh/  → Refresh JWT (in root urls.py)
+"""
+
 from django.urls import path
+from arcx_core.views.wallet_views  import WalletBalanceView, DepositView, WithdrawView, TransactionHistoryView
+from arcx_core.views.oracle_views  import LivePriceView, NAVHistoryView, TodayNAVView
+from arcx_core.views.transfer_views import TransferView
 
 urlpatterns = [
-    path('admin/', admin.site.urls),
+    # ── Wallet ────────────────────────────────────────────────────────────
+    path("wallet/",          WalletBalanceView.as_view(),      name="wallet_balance"),
+    path("wallet/deposit",   DepositView.as_view(),            name="wallet_deposit"),
+    path("wallet/withdraw",  WithdrawView.as_view(),           name="wallet_withdraw"),
+    path("wallet/history",   TransactionHistoryView.as_view(), name="wallet_history"),
+
+    # ── Transfer ──────────────────────────────────────────────────────────
+    path("transfer/",        TransferView.as_view(),           name="transfer"),
+
+    # ── Oracle & NAV ──────────────────────────────────────────────────────
+    path("oracle/price",     LivePriceView.as_view(),          name="oracle_price"),
+    path("nav/history",      NAVHistoryView.as_view(),         name="nav_history"),
+    path("nav/today",        TodayNAVView.as_view(),           name="nav_today"),
 ]
