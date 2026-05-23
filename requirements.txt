@@ -1,5 +1,17 @@
+# Phase 1 — Domain layer
 yfinance
 pandas
 requests
 python-dotenv
 colorama
+statistics
+ 
+# Phase 2 — Database
+Django>=4.2
+psycopg2-binary
+ 
+# Phase 3 — API
+djangorestframework
+djangorestframework-simplejwt   # JWT auth — stateless, no sessions
+django-ratelimit                # Per-user rate limiting on endpoints
+ 

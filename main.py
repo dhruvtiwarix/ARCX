@@ -25,12 +25,12 @@ def print_header():
 
 def print_nav(state, accrual, rebalance):
     print(Fore.YELLOW + "\n── VAULT STATE ──────────────────────────────────────")
-    print(f"  Total Vault    : ${state.total_vault_value_usd:,.2f} USD")
+    print(f"  Total Vault    : ${state.total_vault_value_usd:,.3f} USD")
     print(f"  ARCX Supply    : {state.arcx_supply:,.0f} tokens")
-    print(f"  Stocks (40%)   : ${state.stock_value_usd:,.2f}")
-    print(f"  Bonds  (30%)   : ${state.bond_value_usd:,.2f}")
-    print(f"  Gold   (20%)   : ${state.gold_value_usd:,.2f}")
-    print(f"  Cash   (10%)   : ${state.cash_value_usd:,.2f}")
+    print(f"  Stocks (40%)   : ${state.stock_value_usd:,.3f}")
+    print(f"  Bonds  (30%)   : ${state.bond_value_usd:,.3f}")
+    print(f"  Gold   (20%)   : ${state.gold_value_usd:,.3f}")
+    print(f"  Cash   (10%)   : ${state.cash_value_usd:,.3f}")
 
     print(Fore.YELLOW + "\n── TONIGHT'S DIVIDEND ACCRUAL ───────────────────────")
     print(f"  Stock Yield    : ${accrual.stock_yield_usd:.6f}")
@@ -41,15 +41,15 @@ def print_nav(state, accrual, rebalance):
 
     print(Fore.YELLOW + "\n── REBALANCING STATUS ───────────────────────────────")
     if rebalance.rebalance_needed:
-        print(Fore.RED + f"  WARNING: Rebalance needed. Total drift: {rebalance.total_drift*100:.2f}%")
+        print(Fore.RED + f"  WARNING: Rebalance needed. Total drift: {rebalance.total_drift*100:.3f}%")
         for trade in rebalance.trades:
-            print(f"  {trade.action} {trade.asset.upper()}: ${trade.amount_usd:,.2f}")
+            print(f"  {trade.action} {trade.asset.upper()}: ${trade.amount_usd:,.3f}")
     else:
-        print(Fore.GREEN + f"  OK: All assets within tolerance. Drift: {rebalance.total_drift*100:.2f}%")
+        print(Fore.GREEN + f"  OK: All assets within tolerance. Drift: {rebalance.total_drift*100:.3f}%")
 
     print(Fore.YELLOW + "\n── FINAL NAV ────────────────────────────────────────")
     print(f"  1 ARCX = ${state.nav_usd:.4f} USD")
-    print(Fore.GREEN + Style.BRIGHT + f"  1 ARCX = Rs.{state.nav_inr:.2f} INR")
+    print(Fore.GREEN + Style.BRIGHT + f"  1 ARCX = Rs.{state.nav_inr:.3f} INR")
     print(Fore.CYAN + "=" * 55)
 
 
