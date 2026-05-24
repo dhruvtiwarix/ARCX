@@ -47,6 +47,7 @@ INSTALLED_APPS = [
 ]
 
 MIDDLEWARE = [
+    "arcx_core.middleware.RequestLoggingMiddleware", # <-- ADD THIS FIRST
     'django.middleware.security.SecurityMiddleware',
     'django.contrib.sessions.middleware.SessionMiddleware',
     'django.middleware.common.CommonMiddleware',
@@ -169,3 +170,112 @@ STATIC_URL = 'static/'
 # https://docs.djangoproject.com/en/5.2/ref/settings/#default-auto-field
 
 DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
+
+
+
+"""
+ARCX Logging Configuration — Phase 4
+----------------------------------------
+
+HOW DJANGO LOGGING WORKS (in 3 lines):
+  Logger   → "arcx" logger emits a message
+  Handler  → decides WHERE it goes (console? file? both?)
+  Filter   → decides WHICH messages get through (DEBUG? INFO? ERROR only?)
+
+ARCX uses two handlers in parallel:
+  1. console  → human-readable during development (python manage.py runserver)
+  2. file     → structured JSON in logs/arcx.log (permanent audit trail)
+
+In production, you'd ADD a third handler shipping to Datadog / Loki / CloudWatch.
+The logger code doesn't change — only the handlers in settings.py.
+That's the power of the logging abstraction.
+
+FILE ROTATION:
+  RotatingFileHandler prevents log files from growing forever.
+  maxBytes=10MB, backupCount=5 means:
+    arcx.log       ← current (max 10MB)
+    arcx.log.1     ← previous
+    arcx.log.2     ← before that
+    ...
+    arcx.log.5     ← oldest kept
+  Total max disk: 60MB. After that, oldest files are deleted automatically.
+"""
+
+import os
+
+# Create the logs directory if it doesn't exist
+# (logs/ should be in .gitignore — never commit log files)
+LOG_DIR = os.path.join(BASE_DIR, "logs")
+os.makedirs(LOG_DIR, exist_ok=True)
+
+LOGGING = {
+    "version": 1,
+    "disable_existing_loggers": False,   # Keep Django's own loggers working
+
+    # ── Formatters ────────────────────────────────────────────────────────
+    "formatters": {
+        # For the console: readable prefix + the JSON payload
+        "console_fmt": {
+            "format": "%(asctime)s [%(levelname)s] %(message)s",
+            "datefmt": "%H:%M:%S",
+        },
+        # For the file: raw JSON only (no extra prefix — the JSON has ts already)
+        "json_fmt": {
+            "format": "%(message)s",
+        },
+    },
+
+    # ── Handlers ──────────────────────────────────────────────────────────
+    "handlers": {
+        # Handler 1: Coloured console output for development
+        "console": {
+            "class":     "logging.StreamHandler",
+            "formatter": "console_fmt",
+            "level":     "DEBUG",
+        },
+
+        # Handler 2: Rotating JSON file — the permanent audit trail
+        "arcx_file": {
+            "class":       "logging.handlers.RotatingFileHandler",
+            "filename":    os.path.join(LOG_DIR, "arcx.log"),
+            "maxBytes":    10 * 1024 * 1024,   # 10 MB per file
+            "backupCount": 5,                   # Keep last 5 files
+            "formatter":   "json_fmt",
+            "level":       "INFO",
+            "encoding":    "utf-8",
+        },
+
+        # Handler 3: Errors-only file — quick triage without reading all logs
+        "error_file": {
+            "class":       "logging.handlers.RotatingFileHandler",
+            "filename":    os.path.join(LOG_DIR, "arcx_errors.log"),
+            "maxBytes":    5 * 1024 * 1024,    # 5 MB per file
+            "backupCount": 3,
+            "formatter":   "json_fmt",
+            "level":       "ERROR",
+            "encoding":    "utf-8",
+        },
+    },
+
+    # ── Loggers ───────────────────────────────────────────────────────────
+    "loggers": {
+        # The ARCX application logger — used by arcx_core/logger.py
+        "arcx": {
+            "handlers":  ["console", "arcx_file", "error_file"],
+            "level":     "DEBUG",
+            "propagate": False,   # Don't bubble up to Django's root logger
+        },
+
+        # Django's own request logger — useful in development
+        "django.request": {
+            "handlers":  ["console", "error_file"],
+            "level":     "WARNING",   # Only log 4xx/5xx, not every 200
+            "propagate": False,
+        },
+
+        # Silence noisy libraries
+        "urllib3":    {"level": "WARNING"},
+        "yfinance":   {"level": "WARNING"},
+        "requests":   {"level": "WARNING"},
+    },
+}

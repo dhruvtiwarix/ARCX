@@ -39,23 +39,27 @@ Full endpoint map:
     POST /api/auth/token/refresh/  → Refresh JWT (in root urls.py)
 """
 
+from django.contrib import admin
 from django.urls import path
 from arcx_core.views.wallet_views  import WalletBalanceView, DepositView, WithdrawView, TransactionHistoryView
 from arcx_core.views.oracle_views  import LivePriceView, NAVHistoryView, TodayNAVView
 from arcx_core.views.transfer_views import TransferView
 
 urlpatterns = [
+    # ── Django Admin ──────────────────────────────────────────────────────
+    path("admin/", admin.site.urls),
+
     # ── Wallet ────────────────────────────────────────────────────────────
-    path("wallet/",          WalletBalanceView.as_view(),      name="wallet_balance"),
-    path("wallet/deposit",   DepositView.as_view(),            name="wallet_deposit"),
-    path("wallet/withdraw",  WithdrawView.as_view(),           name="wallet_withdraw"),
-    path("wallet/history",   TransactionHistoryView.as_view(), name="wallet_history"),
+    path("api/v1/wallet/",          WalletBalanceView.as_view(),      name="wallet_balance"),
+    path("api/v1/wallet/deposit",   DepositView.as_view(),            name="wallet_deposit"),
+    path("api/v1/wallet/withdraw",  WithdrawView.as_view(),           name="wallet_withdraw"),
+    path("api/v1/wallet/history",   TransactionHistoryView.as_view(), name="wallet_history"),
 
     # ── Transfer ──────────────────────────────────────────────────────────
-    path("transfer/",        TransferView.as_view(),           name="transfer"),
+    path("api/v1/transfer/",        TransferView.as_view(),           name="transfer"),
 
     # ── Oracle & NAV ──────────────────────────────────────────────────────
-    path("oracle/price",     LivePriceView.as_view(),          name="oracle_price"),
-    path("nav/history",      NAVHistoryView.as_view(),         name="nav_history"),
-    path("nav/today",        TodayNAVView.as_view(),           name="nav_today"),
+    path("api/v1/oracle/price",     LivePriceView.as_view(),          name="oracle_price"),
+    path("api/v1/nav/history",      NAVHistoryView.as_view(),         name="nav_history"),
+    path("api/v1/nav/today",        TodayNAVView.as_view(),           name="nav_today"),
 ]

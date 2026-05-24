@@ -12,3 +12,6 @@ env/
 
 # Reports
 reports/
+
+# ARCX Logs
+logs/
