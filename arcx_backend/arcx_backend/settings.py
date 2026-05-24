@@ -279,3 +279,27 @@ LOGGING = {
         "requests":   {"level": "WARNING"},
     },
 }
+
+# Celery — task queue config
+CELERY_BROKER_URL         = os.getenv("REDIS_URL", "redis://localhost:6379/0")
+CELERY_RESULT_BACKEND     = os.getenv("REDIS_URL", "redis://localhost:6379/0")
+CELERY_ACCEPT_CONTENT     = ["json"]
+CELERY_TASK_SERIALIZER    = "json"
+CELERY_RESULT_SERIALIZER  = "json"
+CELERY_TIMEZONE           = "UTC"
+ 
+# Retry failed tasks up to 3 times with 60-second delay between attempts
+# Handles transient Oracle timeouts or DB connection blips
+CELERY_TASK_MAX_RETRIES   = 3
+CELERY_TASK_DEFAULT_RETRY_DELAY = 60   # seconds
+ 
+# Task time limits — kill a hung task after 5 minutes
+# Prevents one bad Oracle call from blocking the worker indefinitely
+CELERY_TASK_SOFT_TIME_LIMIT = 240   # seconds — raises SoftTimeLimitExceeded
+CELERY_TASK_TIME_LIMIT      = 300   # seconds — kills the process
+ 
+# Acknowledge task only AFTER it completes (not when it's picked up)
+# If the worker crashes mid-task, the task goes back to the queue
+CELERY_TASK_ACKS_LATE = True
+ 
+ 

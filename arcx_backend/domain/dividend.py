@@ -22,7 +22,7 @@ This is called "Daily Accrual" — used by every money market fund.
 """
 
 from dataclasses import dataclass
-from arcx_backend.domain.oracle import MarketPrices
+from domain.oracle import MarketPrices
 
 # ── Annual Yield Constants ────────────────────────────────────────────────────
 ANNUAL_YIELDS = {

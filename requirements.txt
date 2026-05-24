@@ -5,6 +5,8 @@ requests
 python-dotenv
 colorama
 statistics
+celery
+redis
  
 # Phase 2 — Database
 Django>=4.2
