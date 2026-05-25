@@ -1,0 +1,76 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  * { box-sizing: border-box; }
+  body {
+    @apply bg-vault text-text-primary antialiased selection:bg-arcx-gold/20 selection:text-arcx-gold;
+    font-family: 'Inter', sans-serif;
+  }
+  h1, h2, h3, .font-display { 
+    font-family: 'Playfair Display', serif; 
+  }
+  .font-mono {
+    font-family: 'DM Mono', monospace;
+  }
+}
+
+@layer components {
+  /* Layout classes */
+  .layout-grid {
+    @apply grid lg:grid-cols-[240px_1fr] min-h-screen bg-vault;
+  }
+  
+  .sidebar {
+    @apply bg-vault border-r border-vault-border flex flex-col;
+  }
+
+  /* Utility components */
+  .btn {
+    @apply inline-flex items-center justify-center gap-2 rounded-2xl px-5 py-3
+           font-medium text-[15px] transition-all duration-300 disabled:opacity-50
+           disabled:cursor-not-allowed focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-offset-vault;
+  }
+  .btn-primary {
+    @apply btn bg-arcx-gold text-vault font-semibold hover:brightness-110 focus:ring-arcx-gold/50
+           active:scale-[.97] shadow-[0_0_15px_rgba(225,195,137,0.3)];
+  }
+  .btn-ghost {
+    @apply btn bg-transparent text-text-secondary hover:bg-white/5 hover:text-text-primary active:scale-[.97];
+  }
+  .btn-danger {
+    @apply btn bg-arcx-red/10 text-arcx-red hover:bg-arcx-red/20 focus:ring-arcx-red/50 active:scale-[.97];
+  }
+  .input {
+    @apply w-full rounded-2xl border border-vault-border bg-vault-card/50 px-4 py-3 text-[15px]
+           text-text-primary placeholder:text-text-secondary/60 focus:border-arcx-gold/50 focus:ring-4
+           focus:ring-arcx-gold/10 focus:outline-none transition-all duration-300 focus:bg-vault-card backdrop-blur-md;
+  }
+  .card {
+    @apply bg-[#111111]/80 backdrop-blur-2xl rounded-[28px] border border-vault-border shadow-2xl shadow-black/80;
+  }
+  .stat-label {
+    @apply text-[13px] font-medium text-text-secondary tracking-wide;
+  }
+  .stat-value {
+    @apply text-3xl font-display font-semibold text-text-primary tracking-tight;
+  }
+  .badge {
+    @apply inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-[11px] font-semibold uppercase tracking-wider border;
+  }
+  .badge-green  { @apply badge bg-arcx-green/10 text-arcx-green border-arcx-green/20; }
+  .badge-yellow { @apply badge bg-arcx-gold/10 text-arcx-gold border-arcx-gold/20; }
+  .badge-red    { @apply badge bg-arcx-red/10 text-arcx-red border-arcx-red/20; }
+  .badge-blue   { @apply badge bg-[#0A84FF]/10 text-[#0A84FF] border-[#0A84FF]/20; }
+  .badge-gray   { @apply badge bg-white/5 text-text-secondary border-white/10; }
+}
+
+/* Custom scrollbar */
+::-webkit-scrollbar { width: 5px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: #2C2C2E; border-radius: 9999px; }
+::-webkit-scrollbar-thumb:hover { background: #3C3C3E; }
+
+/* Recharts tooltip */
+.recharts-tooltip-wrapper { outline: none !important; }

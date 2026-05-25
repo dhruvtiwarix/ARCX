@@ -1,26 +1,66 @@
 """
-ARCX Root URL Configuration
-------------------------------
-All ARCX endpoints live under /api/v1/.
-Versioning in the URL means we can ship /api/v2/ later without
-breaking any client that still calls /api/v1/.
+ARCX API URL Configuration — v1 (Phase 6 update)
+--------------------------------------------------
+Goes in: arcx_backend/arcx_core/urls.py
+REPLACES the Phase 3 version.
 
-JWT endpoints:
-  POST /api/auth/token/          → get access + refresh tokens
-  POST /api/auth/token/refresh/  → swap refresh → new access token
+Full endpoint map after Phase 6:
+
+  PUBLIC:
+    POST /api/v1/auth/register     → Create account (returns JWT immediately)
+    GET  /api/v1/oracle/price      → Live NAV + asset prices
+    GET  /api/v1/nav/history       → Historical NAV (price chart data)
+    GET  /api/v1/nav/today         → Today's published NAV with audit hash
+
+  AUTHENTICATED (any KYC status):
+    GET  /api/v1/auth/me           → Full profile + wallet balance
+    POST /api/v1/auth/logout       → Blacklist refresh token
+    GET  /api/v1/kyc/status        → Current KYC tier + history
+    GET  /api/v1/wallet/           → Balance + unrealized P&L
+    GET  /api/v1/wallet/history    → Transaction history
+
+  AUTHENTICATED + KYC APPROVED:
+    POST /api/v1/kyc/submit        → Submit KYC document reference
+    POST /api/v1/wallet/deposit    → INR → ARCX  [Idempotency-Key required]
+    POST /api/v1/wallet/withdraw   → ARCX → INR  [Idempotency-Key required]
+    POST /api/v1/transfer/         → P2P ARCX    [Idempotency-Key required]
+
+  AUTH (root urls.py):
+    POST /api/auth/token/          → Login: get access + refresh tokens
+    POST /api/auth/token/refresh/  → Refresh expired access token
 """
 
-from django.urls import path, include
-from rest_framework_simplejwt.views import (
-    TokenObtainPairView,
-    TokenRefreshView,
+from django.urls import path
+
+from arcx_core.views.auth_views     import RegisterView, MeView, LogoutView
+from arcx_core.views.kyc_views      import KYCSubmitView, KYCStatusView
+from arcx_core.views.wallet_views   import (
+    WalletBalanceView, DepositView, WithdrawView, TransactionHistoryView
 )
+from arcx_core.views.oracle_views   import LivePriceView, NAVHistoryView, TodayNAVView
+from arcx_core.views.transfer_views import TransferView
 
 urlpatterns = [
-    # Auth — JWT token exchange
-    path("api/auth/token/",         TokenObtainPairView.as_view(),  name="token_obtain"),
-    path("api/auth/token/refresh/", TokenRefreshView.as_view(),     name="token_refresh"),
+    # ── Auth ─────────────────────────────────────────────────────────────
+    path("auth/register",   RegisterView.as_view(), name="auth_register"),
+    path("auth/me",         MeView.as_view(),       name="auth_me"),
+    path("auth/logout",     LogoutView.as_view(),   name="auth_logout"),
 
-    # ARCX v1 API
-    path("api/v1/", include("arcx_core.urls")),
+    # ── KYC ──────────────────────────────────────────────────────────────
+    path("kyc/submit",      KYCSubmitView.as_view(),  name="kyc_submit"),
+    path("kyc/status",      KYCStatusView.as_view(),  name="kyc_status"),
+
+    # ── Wallet ────────────────────────────────────────────────────────────
+    path("wallet/",         WalletBalanceView.as_view(),      name="wallet_balance"),
+    path("wallet/deposit",  DepositView.as_view(),            name="wallet_deposit"),
+    path("wallet/withdraw", WithdrawView.as_view(),           name="wallet_withdraw"),
+    path("wallet/history",  TransactionHistoryView.as_view(), name="wallet_history"),
+
+    # ── Transfer ──────────────────────────────────────────────────────────
+    path("transfer/",       TransferView.as_view(),           name="transfer"),
+
+    # ── Oracle & NAV ──────────────────────────────────────────────────────
+    path("oracle/price",    LivePriceView.as_view(),          name="oracle_price"),
+    path("nav/history",     NAVHistoryView.as_view(),         name="nav_history"),
+    path("nav/today",       TodayNAVView.as_view(),           name="nav_today"),
 ]

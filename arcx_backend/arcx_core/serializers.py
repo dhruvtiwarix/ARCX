@@ -20,7 +20,8 @@ Why Decimal for amounts?
 from decimal import Decimal, InvalidOperation
 from rest_framework import serializers
 from arcx_core.models import User, Wallet, Transaction, NAVHistory, VaultSnapshot
-
+from rest_framework import serializers
+from arcx_core.models import User, Wallet, KYCRecord
 
 # ─────────────────────────────────────────────────────────────────────────────
 # Wallet Serializers

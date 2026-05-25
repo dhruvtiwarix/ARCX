@@ -16,4 +16,7 @@ psycopg2-binary
 djangorestframework
 djangorestframework-simplejwt   # JWT auth — stateless, no sessions
 django-ratelimit                # Per-user rate limiting on endpoints
+
+# Phase 7 — Frontend CORS
+django-cors-headers>=4.3
  

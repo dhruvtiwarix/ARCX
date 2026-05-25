@@ -1,0 +1,1672 @@
+arcx-frontend/
+├── index.html
+├── package.json
+├── vite.config.js
+├── tailwind.config.js
+├── postcss.config.js
+├── .env.example
+│
+├── src/
+│   ├── main.jsx
+│   ├── App.jsx
+│   │
+│   ├── api/
+│   │   ├── axios.js        ← Axios instance with JWT interceptors
+│   │   ├── auth.js         ← register, login, logout, me
+│   │   ├── wallet.js       ← deposit, withdraw, history, balance
+│   │   ├── oracle.js       ← live price, NAV history
+│   │   └── kyc.js          ← submit, status
+│   │
+│   ├── store/
+│   │   ├── authStore.js    ← Zustand: user, tokens, login/logout actions
+│   │   └── walletStore.js  ← Zustand: balance, transactions
+│   │
+│   ├── pages/
+│   │   ├── LoginPage.jsx
+│   │   ├── RegisterPage.jsx
+│   │   ├── DashboardPage.jsx
+│   │   ├── WalletPage.jsx
+│   │   └── KYCPage.jsx
+│   │
+│   ├── components/
+│   │   ├── layout/
+│   │   │   ├── AppLayout.jsx    ← sidebar + top bar
+│   │   │   └── Sidebar.jsx
+│   │   ├── dashboard/
+│   │   │   ├── NAVChart.jsx     ← Recharts line chart
+│   │   │   ├── VaultPie.jsx     ← Recharts pie - 40/30/20/10
+│   │   │   ├── StatCards.jsx    ← balance, NAV, P&L
+│   │   │   └── CircuitBreakerBanner.jsx
+│   │   ├── wallet/
+│   │   │   ├── DepositForm.jsx
+│   │   │   ├── WithdrawForm.jsx
+│   │   │   └── TransactionTable.jsx
+│   │   └── kyc/
+│   │       ├── KYCForm.jsx
+│   │       └── KYCStatus.jsx
+│   │
+│   └── lib/
+│       └── utils.js
+
+
+
+
+
+package.json
+
+{
+  "name": "arcx-frontend",
+  "private": true,
+  "version": "1.0.0",
+  "type": "module",
+  "scripts": {
+    "dev":     "vite",
+    "build":   "vite build",
+    "preview": "vite preview"
+  },
+  "dependencies": {
+    "react":              "^18.3.1",
+    "react-dom":          "^18.3.1",
+    "react-router-dom":   "^6.26.0",
+    "axios":              "^1.7.3",
+    "zustand":            "^4.5.4",
+    "recharts":           "^2.12.7",
+    "lucide-react":       "^0.427.0",
+    "clsx":               "^2.1.1",
+    "date-fns":           "^3.6.0"
+  },
+  "devDependencies": {
+    "@vitejs/plugin-react": "^4.3.1",
+    "autoprefixer":         "^10.4.20",
+    "postcss":              "^8.4.41",
+    "tailwindcss":          "^3.4.10",
+    "vite":                 "^5.4.1"
+  }
+}
+
+
+
+
+----
+vite.config.js
+
+import { defineConfig } from 'vite'
+import react from '@vitejs/plugin-react'
+
+export default defineConfig({
+  plugins: [react()],
+  server: {
+    port: 3000,
+    proxy: {
+      // Proxy all /api calls to Django during development
+      // This avoids CORS issues in dev. In production, nginx handles this.
+      '/api': {
+        target: 'http://localhost:8000',
+        changeOrigin: true,
+      },
+    },
+  },
+})
+
+
+
+----
+
+tailwind.config.js
+
+/** @type {import('tailwindcss').Config} */
+export default {
+  content: ['./index.html', './src/**/*.{js,jsx}'],
+  theme: {
+    extend: {
+      fontFamily: {
+        sans:    ['"DM Sans"', 'sans-serif'],
+        mono:    ['"DM Mono"', 'monospace'],
+        display: ['"Syne"', 'sans-serif'],
+      },
+      colors: {
+        // ARCX brand palette
+        arcx: {
+          50:  '#eef2ff',
+          100: '#e0e7ff',
+          500: '#6366f1',
+          600: '#4f46e5',
+          700: '#4338ca',
+          900: '#1e1b4b',
+        },
+        vault: '#0f172a',   // sidebar / dark surface
+        card:  '#ffffff',
+        muted: '#64748b',
+      },
+      animation: {
+        'fade-in':      'fadeIn .35s ease forwards',
+        'slide-up':     'slideUp .4s ease forwards',
+        'pulse-green':  'pulseGreen 2s ease-in-out infinite',
+      },
+      keyframes: {
+        fadeIn:     { from: { opacity: 0 }, to: { opacity: 1 } },
+        slideUp:    { from: { opacity: 0, transform: 'translateY(12px)' }, to: { opacity: 1, transform: 'none' } },
+        pulseGreen: { '0%,100%': { boxShadow: '0 0 0 0 rgba(16,185,129,.4)' }, '50%': { boxShadow: '0 0 0 8px rgba(16,185,129,0)' } },
+      },
+    },
+  },
+  plugins: [],
+}
+
+----
+
+index.html
+
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>ARCX — Adaptive Reserve Currency Exchange</title>
+    <link rel="icon" type="image/svg+xml" href="/arcx-icon.svg" />
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link href="https://fonts.googleapis.com/css2?family=Syne:wght@400;500;600;700;800&family=DM+Sans:ital,opsz,wght@0,9..40,300;0,9..40,400;0,9..40,500;1,9..40,300&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet" />
+  </head>
+  <body>
+    <div id="root"></div>
+    <script type="module" src="/src/main.jsx"></script>
+  </body>
+</html>
+
+
+----
+
+authstore.js
+
+/**
+ * ARCX Auth Store — src/store/authStore.js
+ *
+ * Zustand store for authentication state.
+ * Tokens live in localStorage for persistence across refreshes.
+ * User profile lives in store memory.
+ */
+
+import { create } from 'zustand'
+import { authApi } from '../api/index'
+
+export const useAuthStore = create((set, get) => ({
+  user:          null,
+  isAuthenticated: !!localStorage.getItem('access_token'),
+  loading:       false,
+  error:         null,
+
+  // ── Actions ──────────────────────────────────────────────────────────
+
+  register: async (formData) => {
+    set({ loading: true, error: null })
+    try {
+      const res = await authApi.register(formData)
+      const { access_token, refresh_token, ...user } = res.data
+      localStorage.setItem('access_token',  access_token)
+      localStorage.setItem('refresh_token', refresh_token)
+      set({ user, isAuthenticated: true, loading: false })
+      return { success: true }
+    } catch (err) {
+      const msg = err.response?.data?.error || 'Registration failed.'
+      set({ loading: false, error: msg })
+      return { success: false, error: msg }
+    }
+  },
+
+  login: async ({ email, password }) => {
+    set({ loading: true, error: null })
+    try {
+      // simplejwt uses "username" field (which is the ARCX UUID set at registration)
+      // but we log in by email — so we send email as username
+      const res = await authApi.login({ username: email, password })
+      localStorage.setItem('access_token',  res.data.access)
+      localStorage.setItem('refresh_token', res.data.refresh)
+      set({ isAuthenticated: true, loading: false })
+      // Load profile immediately after login
+      await get().fetchMe()
+      return { success: true }
+    } catch (err) {
+      const msg = err.response?.data?.detail || 'Invalid email or password.'
+      set({ loading: false, error: msg })
+      return { success: false, error: msg }
+    }
+  },
+
+  logout: async () => {
+    const refreshToken = localStorage.getItem('refresh_token')
+    try {
+      if (refreshToken) await authApi.logout({ refresh_token: refreshToken })
+    } catch (_) { /* blacklist may fail silently */ }
+    localStorage.removeItem('access_token')
+    localStorage.removeItem('refresh_token')
+    set({ user: null, isAuthenticated: false, error: null })
+  },
+
+  fetchMe: async () => {
+    try {
+      const res = await authApi.me()
+      set({ user: res.data })
+    } catch (_) {}
+  },
+
+  clearError: () => set({ error: null }),
+}))
+
+----
+ main.jsx
+
+// src/main.jsx
+import React from 'react'
+import ReactDOM from 'react-dom/client'
+import App from './App.jsx'
+import './index.css'
+
+ReactDOM.createRoot(document.getElementById('root')).render(
+  <React.StrictMode>
+    <App />
+  </React.StrictMode>,
+)
+
+----
+
+index.css
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  * { box-sizing: border-box; }
+  body {
+    @apply bg-slate-50 text-slate-900 antialiased;
+    font-family: 'DM Sans', sans-serif;
+  }
+  h1, h2, h3 { font-family: 'Syne', sans-serif; }
+}
+
+@layer components {
+  .btn {
+    @apply inline-flex items-center justify-center gap-2 rounded-xl px-5 py-2.5
+           font-medium text-sm transition-all duration-150 disabled:opacity-50
+           disabled:cursor-not-allowed focus:outline-none focus:ring-2 focus:ring-offset-2;
+  }
+  .btn-primary {
+    @apply btn bg-arcx-600 text-white hover:bg-arcx-700 focus:ring-arcx-500
+           active:scale-[.98];
+  }
+  .btn-ghost {
+    @apply btn bg-transparent text-slate-600 hover:bg-slate-100 focus:ring-slate-400;
+  }
+  .btn-danger {
+    @apply btn bg-red-500 text-white hover:bg-red-600 focus:ring-red-400;
+  }
+  .input {
+    @apply w-full rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm
+           placeholder:text-slate-400 focus:border-arcx-500 focus:ring-2
+           focus:ring-arcx-500/20 focus:outline-none transition-all duration-150;
+  }
+  .card {
+    @apply bg-white rounded-2xl border border-slate-100 shadow-sm shadow-slate-100/50;
+  }
+  .stat-label {
+    @apply text-xs font-medium text-slate-500 uppercase tracking-wider;
+  }
+  .stat-value {
+    @apply text-2xl font-display font-semibold text-slate-900;
+  }
+  .badge {
+    @apply inline-flex items-center gap-1 rounded-full px-2.5 py-0.5 text-xs font-medium;
+  }
+  .badge-green  { @apply badge bg-emerald-50 text-emerald-700; }
+  .badge-yellow { @apply badge bg-amber-50 text-amber-700; }
+  .badge-red    { @apply badge bg-red-50 text-red-600; }
+  .badge-blue   { @apply badge bg-arcx-50 text-arcx-700; }
+  .badge-gray   { @apply badge bg-slate-100 text-slate-600; }
+}
+
+/* Custom scrollbar */
+::-webkit-scrollbar { width: 5px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 9999px; }
+::-webkit-scrollbar-thumb:hover { background: #94a3b8; }
+
+/* Recharts tooltip */
+.recharts-tooltip-wrapper { outline: none !important; }
+
+----
+app.jsx
+
+
+
+import { useEffect } from 'react'
+import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom'
+import { useAuthStore } from './store/authStore'
+import AppLayout       from './components/layout/AppLayout'
+import AuthPage        from './pages/AuthPage'
+import DashboardPage   from './pages/DashboardPage'
+import WalletPage      from './pages/WalletPage'
+import KYCPage         from './pages/KYCPage'
+
+// ── Protected route wrapper ────────────────────────────────────────────────────
+function Protected({ children }) {
+  const isAuthenticated = useAuthStore(s => s.isAuthenticated)
+  return isAuthenticated ? children : <Navigate to="/auth" replace />
+}
+
+export default function App() {
+  const { logout, fetchMe, isAuthenticated } = useAuthStore()
+
+  // Listen for forced logout (token refresh failure)
+  useEffect(() => {
+    const handler = () => logout()
+    window.addEventListener('arcx:logout', handler)
+    return () => window.removeEventListener('arcx:logout', handler)
+  }, [logout])
+
+  // Re-hydrate user profile on page refresh
+  useEffect(() => {
+    if (isAuthenticated) fetchMe()
+  }, [isAuthenticated])
+
+  return (
+    <BrowserRouter>
+      <Routes>
+        {/* Public */}
+        <Route path="/auth" element={<AuthPage />} />
+
+        {/* Protected — all inside AppLayout */}
+        <Route path="/" element={
+          <Protected><AppLayout /></Protected>
+        }>
+          <Route index            element={<Navigate to="/dashboard" replace />} />
+          <Route path="dashboard" element={<DashboardPage />} />
+          <Route path="wallet"    element={<WalletPage />} />
+          <Route path="kyc"       element={<KYCPage />} />
+        </Route>
+
+        {/* Catch-all */}
+        <Route path="*" element={<Navigate to="/" replace />} />
+      </Routes>
+    </BrowserRouter>
+  )
+}
+
+
+----
+
+applayout.jsx
+
+import { Outlet, NavLink, useNavigate } from 'react-router-dom'
+import {
+  LayoutDashboard, Wallet, ShieldCheck, LogOut,
+  TrendingUp, Bell, ChevronRight,
+} from 'lucide-react'
+import { useAuthStore } from '../../store/authStore'
+
+const NAV = [
+  { to: '/dashboard', icon: LayoutDashboard, label: 'Dashboard' },
+  { to: '/wallet',    icon: Wallet,          label: 'Wallet'    },
+  { to: '/kyc',       icon: ShieldCheck,     label: 'KYC'       },
+]
+
+function KYCBadge({ status }) {
+  if (status === 'approved') return <span className="badge-green">Verified</span>
+  if (status === 'pending')  return <span className="badge-yellow">Pending</span>
+  return <span className="badge-red">Unverified</span>
+}
+
+export default function AppLayout() {
+  const { user, logout } = useAuthStore()
+  const navigate = useNavigate()
+
+  const handleLogout = async () => {
+    await logout()
+    navigate('/auth')
+  }
+
+  const initials = user?.full_name
+    ? user.full_name.split(' ').map(n => n[0]).join('').toUpperCase().slice(0, 2)
+    : 'AR'
+
+  return (
+    <div className="flex h-screen overflow-hidden bg-slate-50">
+
+      {/* ── Sidebar ───────────────────────────────────────────────────── */}
+      <aside className="w-64 flex-shrink-0 bg-vault flex flex-col">
+
+        {/* Logo */}
+        <div className="flex items-center gap-3 px-6 py-6 border-b border-white/10">
+          <div className="w-8 h-8 rounded-lg bg-arcx-500 flex items-center justify-center">
+            <TrendingUp size={16} className="text-white" />
+          </div>
+          <span className="font-display font-bold text-white text-xl tracking-tight">ARCX</span>
+        </div>
+
+        {/* Nav */}
+        <nav className="flex-1 px-3 py-4 space-y-1">
+          {NAV.map(({ to, icon: Icon, label }) => (
+            <NavLink
+              key={to}
+              to={to}
+              className={({ isActive }) =>
+                `flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium
+                 transition-all duration-150 group
+                 ${isActive
+                   ? 'bg-arcx-600 text-white'
+                   : 'text-slate-400 hover:bg-white/10 hover:text-white'}`
+              }
+            >
+              {({ isActive }) => (
+                <>
+                  <Icon size={18} />
+                  <span className="flex-1">{label}</span>
+                  {isActive && <ChevronRight size={14} className="opacity-60" />}
+                </>
+              )}
+            </NavLink>
+          ))}
+        </nav>
+
+        {/* User footer */}
+        <div className="p-4 border-t border-white/10">
+          <div className="flex items-center gap-3 px-2 mb-3">
+            <div className="w-8 h-8 rounded-full bg-arcx-500 flex items-center justify-center text-white text-xs font-bold">
+              {initials}
+            </div>
+            <div className="flex-1 min-w-0">
+              <p className="text-white text-sm font-medium truncate">
+                {user?.full_name || 'Loading…'}
+              </p>
+              {user?.kyc_status && (
+                <KYCBadge status={user.kyc_status} />
+              )}
+            </div>
+          </div>
+          <button
+            onClick={handleLogout}
+            className="w-full flex items-center gap-2 px-3 py-2 rounded-xl
+                       text-slate-400 hover:bg-white/10 hover:text-white
+                       text-sm transition-all duration-150"
+          >
+            <LogOut size={16} />
+            Sign out
+          </button>
+        </div>
+      </aside>
+
+      {/* ── Main content ──────────────────────────────────────────────── */}
+      <div className="flex-1 flex flex-col overflow-hidden">
+
+        {/* Top bar */}
+        <header className="h-14 bg-white border-b border-slate-100 flex items-center justify-between px-6 flex-shrink-0">
+          <div className="flex items-center gap-2">
+            <span className="text-sm text-slate-500">
+              {new Date().toLocaleDateString('en-IN', {
+                weekday: 'long', day: 'numeric', month: 'long', year: 'numeric',
+              })}
+            </span>
+          </div>
+          <div className="flex items-center gap-3">
+            <button className="w-8 h-8 rounded-lg hover:bg-slate-100 flex items-center justify-center text-slate-500 transition-colors">
+              <Bell size={16} />
+            </button>
+            <span className="text-sm text-slate-500">{user?.email}</span>
+          </div>
+        </header>
+
+        {/* Page content */}
+        <main className="flex-1 overflow-y-auto p-6">
+          <Outlet />
+        </main>
+      </div>
+    </div>
+  )
+}
+
+
+----
+
+authpage.jsx
+
+import { useState } from 'react'
+import { useNavigate } from 'react-router-dom'
+import { TrendingUp, Eye, EyeOff, ArrowRight, Loader2 } from 'lucide-react'
+import { useAuthStore } from '../store/authStore'
+
+function LoginForm({ onSwitch }) {
+  const [form, setForm]   = useState({ email: '', password: '' })
+  const [show, setShow]   = useState(false)
+  const { login, loading, error, clearError } = useAuthStore()
+  const navigate = useNavigate()
+
+  const handle = e => { clearError(); setForm(p => ({ ...p, [e.target.name]: e.target.value })) }
+
+  const submit = async e => {
+    e.preventDefault()
+    const res = await login(form)
+    if (res.success) navigate('/dashboard')
+  }
+
+  return (
+    <form onSubmit={submit} className="space-y-4 animate-slide-up">
+      <div>
+        <label className="block text-sm font-medium text-slate-700 mb-1.5">Email</label>
+        <input className="input" type="email" name="email" value={form.email}
+               onChange={handle} placeholder="you@example.com" required autoFocus />
+      </div>
+      <div>
+        <label className="block text-sm font-medium text-slate-700 mb-1.5">Password</label>
+        <div className="relative">
+          <input className="input pr-10" type={show ? 'text' : 'password'}
+                 name="password" value={form.password} onChange={handle}
+                 placeholder="••••••••" required />
+          <button type="button" onClick={() => setShow(p => !p)}
+                  className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600">
+            {show ? <EyeOff size={16} /> : <Eye size={16} />}
+          </button>
+        </div>
+      </div>
+
+      {error && (
+        <p className="text-sm text-red-600 bg-red-50 border border-red-100 rounded-xl px-4 py-2.5">
+          {error}
+        </p>
+      )}
+
+      <button type="submit" className="btn-primary w-full mt-2" disabled={loading}>
+        {loading ? <Loader2 size={16} className="animate-spin" /> : <>Sign in <ArrowRight size={16} /></>}
+      </button>
+
+      <p className="text-center text-sm text-slate-500">
+        No account?{' '}
+        <button type="button" onClick={onSwitch} className="text-arcx-600 font-medium hover:underline">
+          Create one
+        </button>
+      </p>
+    </form>
+  )
+}
+
+function RegisterForm({ onSwitch }) {
+  const [form, setForm] = useState({ email: '', password: '', full_name: '', phone: '' })
+  const [show, setShow] = useState(false)
+  const { register, loading, error, clearError } = useAuthStore()
+  const navigate = useNavigate()
+
+  const handle = e => { clearError(); setForm(p => ({ ...p, [e.target.name]: e.target.value })) }
+
+  const submit = async e => {
+    e.preventDefault()
+    const res = await register(form)
+    if (res.success) navigate('/dashboard')
+  }
+
+  return (
+    <form onSubmit={submit} className="space-y-4 animate-slide-up">
+      <div className="grid grid-cols-2 gap-3">
+        <div className="col-span-2">
+          <label className="block text-sm font-medium text-slate-700 mb-1.5">Full name</label>
+          <input className="input" type="text" name="full_name" value={form.full_name}
+                 onChange={handle} placeholder="Rahul Sharma" required autoFocus />
+        </div>
+        <div className="col-span-2">
+          <label className="block text-sm font-medium text-slate-700 mb-1.5">Email</label>
+          <input className="input" type="email" name="email" value={form.email}
+                 onChange={handle} placeholder="you@example.com" required />
+        </div>
+        <div className="col-span-2">
+          <label className="block text-sm font-medium text-slate-700 mb-1.5">Phone <span className="text-slate-400">(optional)</span></label>
+          <input className="input" type="tel" name="phone" value={form.phone}
+                 onChange={handle} placeholder="+91 98765 43210" />
+        </div>
+        <div className="col-span-2">
+          <label className="block text-sm font-medium text-slate-700 mb-1.5">Password</label>
+          <div className="relative">
+            <input className="input pr-10" type={show ? 'text' : 'password'}
+                   name="password" value={form.password} onChange={handle}
+                   placeholder="At least 8 characters" minLength={8} required />
+            <button type="button" onClick={() => setShow(p => !p)}
+                    className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600">
+              {show ? <EyeOff size={16} /> : <Eye size={16} />}
+            </button>
+          </div>
+        </div>
+      </div>
+
+      {error && (
+        <p className="text-sm text-red-600 bg-red-50 border border-red-100 rounded-xl px-4 py-2.5">
+          {error}
+        </p>
+      )}
+
+      <button type="submit" className="btn-primary w-full mt-2" disabled={loading}>
+        {loading
+          ? <Loader2 size={16} className="animate-spin" />
+          : <>Create account <ArrowRight size={16} /></>}
+      </button>
+
+      <p className="text-center text-sm text-slate-500">
+        Already have an account?{' '}
+        <button type="button" onClick={onSwitch} className="text-arcx-600 font-medium hover:underline">
+          Sign in
+        </button>
+      </p>
+    </form>
+  )
+}
+
+export default function AuthPage() {
+  const [tab, setTab] = useState('login')
+
+  return (
+    <div className="min-h-screen bg-gradient-to-br from-slate-900 via-vault to-slate-800 flex">
+
+      {/* Left panel — brand */}
+      <div className="hidden lg:flex flex-1 flex-col justify-between p-12 text-white">
+        <div className="flex items-center gap-3">
+          <div className="w-9 h-9 rounded-xl bg-arcx-500 flex items-center justify-center">
+            <TrendingUp size={18} className="text-white" />
+          </div>
+          <span className="font-display font-bold text-2xl tracking-tight">ARCX</span>
+        </div>
+
+        <div className="space-y-6">
+          <h1 className="font-display text-5xl font-bold leading-tight">
+            Your wealth,<br />
+            <span className="text-arcx-400">inflation-proof.</span>
+          </h1>
+          <p className="text-slate-400 text-lg max-w-md leading-relaxed">
+            The world's first yield-bearing digital currency.
+            Backed 40% stocks · 30% bonds · 20% gold · 10% cash.
+          </p>
+          <div className="flex gap-4 pt-2">
+            {[
+              { label: 'Annual yield', value: '~2.22%' },
+              { label: 'Zero fees',    value: 'Transfers' },
+              { label: 'Live NAV',     value: 'Real-time' },
+            ].map(({ label, value }) => (
+              <div key={label} className="bg-white/10 rounded-2xl px-5 py-4 backdrop-blur-sm">
+                <p className="text-slate-400 text-xs uppercase tracking-wider mb-1">{label}</p>
+                <p className="text-white font-display font-semibold text-lg">{value}</p>
+              </div>
+            ))}
+          </div>
+        </div>
+
+        <p className="text-slate-600 text-sm">© 2025 ARCX — Adaptive Reserve Currency Exchange</p>
+      </div>
+
+      {/* Right panel — auth form */}
+      <div className="w-full lg:w-[440px] flex-shrink-0 flex items-center justify-center p-8 bg-white lg:rounded-l-3xl">
+        <div className="w-full max-w-sm">
+
+          {/* Mobile logo */}
+          <div className="flex items-center gap-2 mb-8 lg:hidden">
+            <div className="w-8 h-8 rounded-lg bg-arcx-500 flex items-center justify-center">
+              <TrendingUp size={16} className="text-white" />
+            </div>
+            <span className="font-display font-bold text-xl">ARCX</span>
+          </div>
+
+          {/* Tab toggle */}
+          <div className="flex gap-1 bg-slate-100 rounded-xl p-1 mb-7">
+            {['login', 'register'].map(t => (
+              <button
+                key={t}
+                onClick={() => setTab(t)}
+                className={`flex-1 py-2 rounded-lg text-sm font-medium transition-all duration-150
+                  ${tab === t
+                    ? 'bg-white text-slate-900 shadow-sm'
+                    : 'text-slate-500 hover:text-slate-700'}`}
+              >
+                {t === 'login' ? 'Sign in' : 'Create account'}
+              </button>
+            ))}
+          </div>
+
+          <h2 className="font-display font-semibold text-xl text-slate-900 mb-6">
+            {tab === 'login' ? 'Welcome back' : 'Get started'}
+          </h2>
+
+          {tab === 'login'
+            ? <LoginForm    onSwitch={() => setTab('register')} />
+            : <RegisterForm onSwitch={() => setTab('login')} />
+          }
+        </div>
+      </div>
+    </div>
+  )
+}
+
+
+----
+dashboardpage.jsx
+
+import { useEffect, useState } from 'react'
+import {
+  LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer,
+  CartesianGrid, PieChart, Pie, Cell, Legend,
+} from 'recharts'
+import { TrendingUp, TrendingDown, Zap, RefreshCw, AlertTriangle } from 'lucide-react'
+import { oracleApi } from '../api/index'
+import { useAuthStore } from '../store/authStore'
+import { format } from 'date-fns'
+
+// ── Vault pie data (static 40/30/20/10 allocation) ───────────────────────────
+const VAULT_ALLOC = [
+  { name: 'Stocks',  value: 40, color: '#6366f1' },
+  { name: 'Bonds',   value: 30, color: '#0ea5e9' },
+  { name: 'Gold',    value: 20, color: '#f59e0b' },
+  { name: 'Cash',    value: 10, color: '#10b981' },
+]
+
+// ── Custom tooltip for NAV chart ──────────────────────────────────────────────
+function NavTooltip({ active, payload, label }) {
+  if (!active || !payload?.length) return null
+  const nav = payload[0]?.value
+  return (
+    <div className="bg-white border border-slate-200 rounded-xl shadow-lg px-4 py-3 text-sm">
+      <p className="text-slate-500 mb-1">{label}</p>
+      <p className="font-semibold text-slate-900">₹{Number(nav).toFixed(4)}</p>
+    </div>
+  )
+}
+
+// ── Stat card ─────────────────────────────────────────────────────────────────
+function StatCard({ label, value, sub, trend, icon: Icon, accent }) {
+  const isUp = trend > 0
+  return (
+    <div className="card p-5 flex flex-col gap-3 animate-fade-in">
+      <div className="flex items-center justify-between">
+        <span className="stat-label">{label}</span>
+        <div className={`w-8 h-8 rounded-lg flex items-center justify-center ${accent}`}>
+          <Icon size={16} className="text-white" />
+        </div>
+      </div>
+      <div>
+        <p className="stat-value">{value}</p>
+        {sub && (
+          <p className={`text-sm mt-1 flex items-center gap-1 font-medium
+            ${isUp ? 'text-emerald-600' : 'text-red-500'}`}>
+            {isUp ? <TrendingUp size={14} /> : <TrendingDown size={14} />}
+            {sub}
+          </p>
+        )}
+      </div>
+    </div>
+  )
+}
+
+export default function DashboardPage() {
+  const { user } = useAuthStore()
+  const [navHistory, setNavHistory] = useState([])
+  const [livePrice,  setLivePrice]  = useState(null)
+  const [loading,    setLoading]    = useState(true)
+  const [lastUpdate, setLastUpdate] = useState(null)
+
+  const balance = Number(user?.arcx_balance || 0)
+  const costBasis = Number(user?.cost_basis_inr || 0)
+
+  const fetchData = async () => {
+    try {
+      const [histRes, priceRes] = await Promise.all([
+        oracleApi.navHistory(30),
+        oracleApi.livePrice(),
+      ])
+      // Recharts needs { date, nav } shape
+      const history = histRes.data.history
+        .slice()
+        .reverse()
+        .map(h => ({
+          date: format(new Date(h.nav_date), 'dd MMM'),
+          nav:  Number(h.nav_inr).toFixed(4),
+        }))
+      setNavHistory(history)
+      setLivePrice(priceRes.data)
+      setLastUpdate(new Date())
+    } catch (_) {}
+    setLoading(false)
+  }
+
+  useEffect(() => {
+    fetchData()
+    // Poll every 30 seconds
+    const id = setInterval(fetchData, 30_000)
+    return () => clearInterval(id)
+  }, [])
+
+  const navInr       = Number(livePrice?.nav_inr  || 0)
+  const currentValue = balance * navInr
+  const pnl          = currentValue - costBasis
+  const pnlPct       = costBasis > 0 ? (pnl / costBasis) * 100 : 0
+
+  // First and last nav for trend
+  const navTrend = navHistory.length >= 2
+    ? Number(navHistory.at(-1)?.nav) - Number(navHistory[0]?.nav)
+    : 0
+
+  return (
+    <div className="space-y-6 animate-fade-in">
+
+      {/* Page header */}
+      <div className="flex items-center justify-between">
+        <div>
+          <h1 className="font-display font-semibold text-2xl text-slate-900">Dashboard</h1>
+          <p className="text-sm text-slate-500 mt-0.5">
+            {lastUpdate
+              ? `Updated ${format(lastUpdate, 'hh:mm:ss a')}`
+              : 'Loading live data…'}
+          </p>
+        </div>
+        <button onClick={fetchData}
+                className="btn-ghost text-slate-500 gap-2 border border-slate-200">
+          <RefreshCw size={14} className={loading ? 'animate-spin' : ''} />
+          Refresh
+        </button>
+      </div>
+
+      {/* KYC banner */}
+      {user?.kyc_status === 'pending' && (
+        <div className="flex items-center gap-3 bg-amber-50 border border-amber-200 text-amber-800 rounded-2xl px-5 py-3.5 text-sm">
+          <AlertTriangle size={16} className="flex-shrink-0" />
+          <span>Complete KYC verification to start depositing and transacting.</span>
+          <a href="/kyc" className="ml-auto font-medium underline underline-offset-2">
+            Verify now →
+          </a>
+        </div>
+      )}
+
+      {/* Stat cards */}
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+        <StatCard
+          label="ARCX Balance"
+          value={balance.toFixed(4)}
+          sub={null}
+          icon={Zap}
+          accent="bg-arcx-500"
+          trend={0}
+        />
+        <StatCard
+          label="Portfolio Value"
+          value={`₹${currentValue.toLocaleString('en-IN', { maximumFractionDigits: 2 })}`}
+          sub={costBasis > 0
+            ? `${pnl >= 0 ? '+' : ''}₹${pnl.toFixed(2)} (${pnlPct.toFixed(2)}%)`
+            : null}
+          icon={pnl >= 0 ? TrendingUp : TrendingDown}
+          accent={pnl >= 0 ? 'bg-emerald-500' : 'bg-red-500'}
+          trend={pnl}
+        />
+        <StatCard
+          label="Live NAV"
+          value={`₹${navInr.toFixed(4)}`}
+          sub={navTrend !== 0
+            ? `${navTrend >= 0 ? '+' : ''}${navTrend.toFixed(4)} (30d)`
+            : null}
+          icon={TrendingUp}
+          accent="bg-sky-500"
+          trend={navTrend}
+        />
+        <StatCard
+          label="SPY (Live)"
+          value={`$${Number(livePrice?.spy_usd || 0).toFixed(2)}`}
+          sub={`₹1 = $${Number(livePrice?.usd_inr || 0).toFixed(2)}`}
+          icon={TrendingUp}
+          accent="bg-violet-500"
+          trend={0}
+        />
+      </div>
+
+      {/* Charts row */}
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
+
+        {/* NAV History chart — 2/3 width */}
+        <div className="card p-5 lg:col-span-2">
+          <div className="flex items-center justify-between mb-5">
+            <div>
+              <h3 className="font-display font-semibold text-base text-slate-900">NAV History</h3>
+              <p className="text-xs text-slate-500 mt-0.5">1 ARCX price in INR — last 30 days</p>
+            </div>
+            <span className={`text-sm font-medium ${navTrend >= 0 ? 'text-emerald-600' : 'text-red-500'}`}>
+              {navTrend >= 0 ? '▲' : '▼'} {Math.abs(navTrend).toFixed(4)}
+            </span>
+          </div>
+          {loading ? (
+            <div className="h-48 flex items-center justify-center text-slate-400 text-sm">
+              Loading chart…
+            </div>
+          ) : navHistory.length === 0 ? (
+            <div className="h-48 flex items-center justify-center text-slate-400 text-sm">
+              No NAV data yet. Data appears after the first EOD task runs.
+            </div>
+          ) : (
+            <ResponsiveContainer width="100%" height={200}>
+              <LineChart data={navHistory} margin={{ top: 4, right: 4, left: -20, bottom: 0 }}>
+                <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" />
+                <XAxis dataKey="date" tick={{ fontSize: 11, fill: '#94a3b8' }} tickLine={false} axisLine={false} />
+                <YAxis tick={{ fontSize: 11, fill: '#94a3b8' }} tickLine={false} axisLine={false}
+                       tickFormatter={v => `₹${v}`} domain={['auto', 'auto']} />
+                <Tooltip content={<NavTooltip />} />
+                <Line type="monotone" dataKey="nav" stroke="#6366f1" strokeWidth={2.5}
+                      dot={false} activeDot={{ r: 5, fill: '#6366f1', strokeWidth: 0 }} />
+              </LineChart>
+            </ResponsiveContainer>
+          )}
+        </div>
+
+        {/* Vault allocation pie — 1/3 width */}
+        <div className="card p-5">
+          <h3 className="font-display font-semibold text-base text-slate-900 mb-1">Vault Allocation</h3>
+          <p className="text-xs text-slate-500 mb-4">Backing asset split</p>
+          <ResponsiveContainer width="100%" height={180}>
+            <PieChart>
+              <Pie data={VAULT_ALLOC} cx="50%" cy="50%" innerRadius={52} outerRadius={76}
+                   paddingAngle={3} dataKey="value">
+                {VAULT_ALLOC.map((entry, i) => (
+                  <Cell key={i} fill={entry.color} />
+                ))}
+              </Pie>
+              <Tooltip formatter={(v, n) => [`${v}%`, n]} />
+            </PieChart>
+          </ResponsiveContainer>
+          <div className="grid grid-cols-2 gap-1.5 mt-2">
+            {VAULT_ALLOC.map(a => (
+              <div key={a.name} className="flex items-center gap-2 text-xs text-slate-600">
+                <span className="w-2.5 h-2.5 rounded-full flex-shrink-0" style={{ background: a.color }} />
+                <span>{a.name}</span>
+                <span className="ml-auto font-medium text-slate-800">{a.value}%</span>
+              </div>
+            ))}
+          </div>
+        </div>
+      </div>
+
+      {/* Live asset prices */}
+      {livePrice && (
+        <div className="card p-5">
+          <h3 className="font-display font-semibold text-base text-slate-900 mb-4">Live Asset Prices</h3>
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+            {[
+              { label: 'SPY (Stocks)', value: `$${Number(livePrice.spy_usd).toFixed(2)}`,  color: '#6366f1' },
+              { label: 'TLT (Bonds)',  value: `$${Number(livePrice.tlt_usd).toFixed(2)}`,  color: '#0ea5e9' },
+              { label: 'GLD (Gold)',   value: `$${Number(livePrice.gld_usd).toFixed(2)}`,  color: '#f59e0b' },
+              { label: 'USD/INR',      value: `₹${Number(livePrice.usd_inr).toFixed(2)}`, color: '#10b981' },
+            ].map(({ label, value, color }) => (
+              <div key={label} className="bg-slate-50 rounded-xl p-4">
+                <div className="flex items-center gap-2 mb-2">
+                  <span className="w-2 h-2 rounded-full" style={{ background: color }} />
+                  <span className="text-xs text-slate-500">{label}</span>
+                </div>
+                <p className="font-mono font-medium text-lg text-slate-900">{value}</p>
+              </div>
+            ))}
+          </div>
+          <p className="text-xs text-slate-400 mt-3 flex items-center gap-1">
+            <Zap size={11} />
+            Sources: {livePrice.sources_used?.join(', ')} · TWAP prices
+          </p>
+        </div>
+      )}
+    </div>
+  )
+}
+
+----
+
+walletpage.jsx
+
+import { useState, useEffect } from 'react'
+import { ArrowDownLeft, ArrowUpRight, Send, Clock, Loader2,
+         CheckCircle2, XCircle, ArrowLeftRight } from 'lucide-react'
+import { walletApi, oracleApi } from '../api/index'
+import { useAuthStore } from '../store/authStore'
+import { format } from 'date-fns'
+
+function genKey() {
+  return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, c => {
+    const r = Math.random() * 16 | 0
+    return (c === 'x' ? r : (r & 0x3 | 0x8)).toString(16)
+  })
+}
+
+// ── Action tab component ──────────────────────────────────────────────────────
+function ActionTabs({ active, onSelect }) {
+  const tabs = [
+    { id: 'deposit',  label: 'Deposit',  icon: ArrowDownLeft  },
+    { id: 'withdraw', label: 'Withdraw', icon: ArrowUpRight    },
+    { id: 'transfer', label: 'Transfer', icon: Send            },
+  ]
+  return (
+    <div className="flex gap-2">
+      {tabs.map(({ id, label, icon: Icon }) => (
+        <button
+          key={id}
+          onClick={() => onSelect(id)}
+          className={`flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-medium
+                      transition-all duration-150 border
+            ${active === id
+              ? 'bg-arcx-600 text-white border-arcx-600'
+              : 'bg-white text-slate-600 border-slate-200 hover:border-arcx-300'}`}
+        >
+          <Icon size={15} />
+          {label}
+        </button>
+      ))}
+    </div>
+  )
+}
+
+// ── Success / error flash ─────────────────────────────────────────────────────
+function Flash({ type, msg }) {
+  if (!msg) return null
+  return (
+    <div className={`flex items-center gap-2 rounded-xl px-4 py-3 text-sm font-medium
+      ${type === 'ok'
+        ? 'bg-emerald-50 border border-emerald-200 text-emerald-700'
+        : 'bg-red-50 border border-red-100 text-red-600'}`}>
+      {type === 'ok'
+        ? <CheckCircle2 size={16} className="flex-shrink-0" />
+        : <XCircle size={16} className="flex-shrink-0" />}
+      {msg}
+    </div>
+  )
+}
+
+// ── Transaction row ───────────────────────────────────────────────────────────
+const TX_META = {
+  deposit:  { label: 'Deposit',  color: 'text-emerald-600', bg: 'bg-emerald-50', icon: ArrowDownLeft },
+  withdraw: { label: 'Withdraw', color: 'text-red-500',     bg: 'bg-red-50',     icon: ArrowUpRight  },
+  transfer: { label: 'Transfer', color: 'text-arcx-600',    bg: 'bg-arcx-50',    icon: ArrowLeftRight },
+  dividend: { label: 'Dividend', color: 'text-sky-600',     bg: 'bg-sky-50',     icon: ArrowDownLeft  },
+}
+
+function TxRow({ tx }) {
+  const meta = TX_META[tx.tx_type] || TX_META.deposit
+  const Icon = meta.icon
+  const amt  = Number(tx.amount_arcx)
+
+  return (
+    <div className="flex items-center gap-4 py-3.5 border-b border-slate-50 last:border-0">
+      <div className={`w-9 h-9 rounded-xl flex items-center justify-center ${meta.bg}`}>
+        <Icon size={16} className={meta.color} />
+      </div>
+      <div className="flex-1 min-w-0">
+        <p className="text-sm font-medium text-slate-800">{meta.label}</p>
+        <p className="text-xs text-slate-400 mt-0.5">
+          NAV ₹{Number(tx.nav_at_tx).toFixed(4)} ·{' '}
+          {format(new Date(tx.created_at), 'dd MMM, hh:mm a')}
+        </p>
+      </div>
+      <div className="text-right">
+        <p className={`text-sm font-semibold font-mono ${amt >= 0 ? 'text-emerald-600' : 'text-red-500'}`}>
+          {amt >= 0 ? '+' : ''}{amt.toFixed(6)} ARCX
+        </p>
+        {Number(tx.amount_inr) !== 0 && (
+          <p className="text-xs text-slate-400 mt-0.5">
+            ₹{Number(tx.amount_inr).toLocaleString('en-IN', { maximumFractionDigits: 2 })}
+          </p>
+        )}
+      </div>
+      <span className={`badge ml-2 ${tx.status === 'completed' ? 'badge-green' : 'badge-gray'}`}>
+        {tx.status}
+      </span>
+    </div>
+  )
+}
+
+export default function WalletPage() {
+  const { user, fetchMe } = useAuthStore()
+  const [tab,     setTab]     = useState('deposit')
+  const [form,    setForm]    = useState({ amount_inr: '', amount_arcx: '', to_user_email: '', note: '' })
+  const [flash,   setFlash]   = useState(null)
+  const [loading, setLoading] = useState(false)
+  const [txns,    setTxns]    = useState([])
+  const [nav,     setNav]     = useState(null)
+  const [txLoad,  setTxLoad]  = useState(true)
+
+  const kyc_ok = user?.kyc_status === 'approved'
+  const balance = Number(user?.arcx_balance || 0)
+
+  const showFlash = (type, msg) => {
+    setFlash({ type, msg })
+    setTimeout(() => setFlash(null), 4000)
+  }
+
+  const loadHistory = async () => {
+    setTxLoad(true)
+    try {
+      const res = await walletApi.history(30)
+      setTxns(res.data.transactions || [])
+    } catch (_) {}
+    setTxLoad(false)
+  }
+
+  const loadNav = async () => {
+    try {
+      const res = await oracleApi.livePrice()
+      setNav(Number(res.data.nav_inr))
+    } catch (_) {}
+  }
+
+  useEffect(() => { loadHistory(); loadNav() }, [])
+
+  const handleChange = e => setForm(p => ({ ...p, [e.target.name]: e.target.value }))
+
+  const handleDeposit = async e => {
+    e.preventDefault()
+    if (!kyc_ok) return showFlash('err', 'Complete KYC before depositing.')
+    setLoading(true)
+    try {
+      const res = await walletApi.deposit({ amount_inr: form.amount_inr }, genKey())
+      const d = res.data
+      showFlash('ok', `Deposited! +${Number(d.arcx_credited).toFixed(6)} ARCX · NAV ₹${Number(d.nav_at_tx).toFixed(4)}`)
+      setForm(p => ({ ...p, amount_inr: '' }))
+      fetchMe(); loadHistory()
+    } catch (err) {
+      showFlash('err', err.response?.data?.error || 'Deposit failed.')
+    }
+    setLoading(false)
+  }
+
+  const handleWithdraw = async e => {
+    e.preventDefault()
+    setLoading(true)
+    try {
+      const res = await walletApi.withdraw({ amount_arcx: form.amount_arcx }, genKey())
+      const d = res.data
+      showFlash('ok', `Withdrawn! ₹${Number(d.inr_returned).toFixed(2)} credited · NAV ₹${Number(d.nav_at_tx).toFixed(4)}`)
+      setForm(p => ({ ...p, amount_arcx: '' }))
+      fetchMe(); loadHistory()
+    } catch (err) {
+      showFlash('err', err.response?.data?.error || 'Withdrawal failed.')
+    }
+    setLoading(false)
+  }
+
+  const handleTransfer = async e => {
+    e.preventDefault()
+    setLoading(true)
+    try {
+      await walletApi.transfer({
+        to_user_email: form.to_user_email,
+        amount_arcx:   form.amount_arcx,
+        note:          form.note,
+      }, genKey())
+      showFlash('ok', `Sent ${form.amount_arcx} ARCX to ${form.to_user_email}. Fee: ₹0.00`)
+      setForm(p => ({ ...p, amount_arcx: '', to_user_email: '', note: '' }))
+      fetchMe(); loadHistory()
+    } catch (err) {
+      showFlash('err', err.response?.data?.error || 'Transfer failed.')
+    }
+    setLoading(false)
+  }
+
+  // Estimated ARCX for deposit preview
+  const estimatedArcx = nav && form.amount_inr
+    ? (Number(form.amount_inr) / nav).toFixed(6)
+    : null
+
+  // Estimated INR for withdraw preview
+  const estimatedInr = nav && form.amount_arcx
+    ? (Number(form.amount_arcx) * nav).toFixed(2)
+    : null
+
+  return (
+    <div className="space-y-6 animate-fade-in">
+      <div>
+        <h1 className="font-display font-semibold text-2xl text-slate-900">Wallet</h1>
+        <p className="text-sm text-slate-500 mt-0.5">Deposit, withdraw, or transfer ARCX instantly</p>
+      </div>
+
+      <div className="grid grid-cols-1 lg:grid-cols-5 gap-6">
+
+        {/* ── Left: action panel ─────────────────────────────────────── */}
+        <div className="lg:col-span-2 space-y-4">
+
+          {/* Balance card */}
+          <div className="card p-5 bg-vault text-white">
+            <p className="text-slate-400 text-xs uppercase tracking-wider mb-2">ARCX Balance</p>
+            <p className="font-display font-bold text-3xl">{balance.toFixed(6)}</p>
+            {nav && (
+              <p className="text-slate-400 text-sm mt-1">
+                ≈ ₹{(balance * nav).toLocaleString('en-IN', { maximumFractionDigits: 2 })}
+              </p>
+            )}
+          </div>
+
+          {/* Action tabs */}
+          <ActionTabs active={tab} onSelect={setTab} />
+
+          {flash && <Flash type={flash.type} msg={flash.msg} />}
+
+          {/* Forms */}
+          {tab === 'deposit' && (
+            <form onSubmit={handleDeposit} className="card p-5 space-y-4">
+              <div>
+                <label className="block text-sm font-medium text-slate-700 mb-1.5">
+                  Amount in INR
+                </label>
+                <div className="relative">
+                  <span className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400 text-sm">₹</span>
+                  <input className="input pl-7" type="number" name="amount_inr"
+                         value={form.amount_inr} onChange={handleChange}
+                         placeholder="1000.00" min="100" step="0.01" required />
+                </div>
+                {estimatedArcx && (
+                  <p className="text-xs text-arcx-600 mt-1.5 font-medium">
+                    ≈ {estimatedArcx} ARCX at live NAV ₹{nav?.toFixed(4)}
+                  </p>
+                )}
+              </div>
+              {!kyc_ok && (
+                <p className="text-xs text-amber-600 bg-amber-50 border border-amber-100 rounded-lg px-3 py-2">
+                  KYC verification required to deposit.
+                </p>
+              )}
+              <button type="submit" className="btn-primary w-full" disabled={loading || !kyc_ok}>
+                {loading
+                  ? <Loader2 size={16} className="animate-spin" />
+                  : <><ArrowDownLeft size={16} /> Deposit</>}
+              </button>
+            </form>
+          )}
+
+          {tab === 'withdraw' && (
+            <form onSubmit={handleWithdraw} className="card p-5 space-y-4">
+              <div>
+                <label className="block text-sm font-medium text-slate-700 mb-1.5">
+                  Amount in ARCX
+                </label>
+                <div className="relative">
+                  <input className="input pr-14" type="number" name="amount_arcx"
+                         value={form.amount_arcx} onChange={handleChange}
+                         placeholder="10.00" min="0.01" step="0.000001" required />
+                  <span className="absolute right-3.5 top-1/2 -translate-y-1/2 text-slate-400 text-xs font-medium">ARCX</span>
+                </div>
+                {estimatedInr && (
+                  <p className="text-xs text-arcx-600 mt-1.5 font-medium">
+                    ≈ ₹{Number(estimatedInr).toLocaleString('en-IN')} at live NAV ₹{nav?.toFixed(4)}
+                  </p>
+                )}
+              </div>
+              <button type="submit" className="btn-primary w-full" disabled={loading}>
+                {loading
+                  ? <Loader2 size={16} className="animate-spin" />
+                  : <><ArrowUpRight size={16} /> Withdraw</>}
+              </button>
+            </form>
+          )}
+
+          {tab === 'transfer' && (
+            <form onSubmit={handleTransfer} className="card p-5 space-y-4">
+              <div>
+                <label className="block text-sm font-medium text-slate-700 mb-1.5">Recipient email</label>
+                <input className="input" type="email" name="to_user_email"
+                       value={form.to_user_email} onChange={handleChange}
+                       placeholder="friend@example.com" required />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-slate-700 mb-1.5">Amount (ARCX)</label>
+                <div className="relative">
+                  <input className="input pr-14" type="number" name="amount_arcx"
+                         value={form.amount_arcx} onChange={handleChange}
+                         placeholder="5.00" min="0.000001" step="0.000001" required />
+                  <span className="absolute right-3.5 top-1/2 -translate-y-1/2 text-slate-400 text-xs font-medium">ARCX</span>
+                </div>
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-slate-700 mb-1.5">
+                  Note <span className="text-slate-400">(optional)</span>
+                </label>
+                <input className="input" type="text" name="note"
+                       value={form.note} onChange={handleChange}
+                       placeholder="Splitting dinner" maxLength={140} />
+              </div>
+              <div className="bg-emerald-50 border border-emerald-100 rounded-xl px-4 py-2.5 text-sm text-emerald-700 font-medium flex items-center gap-2">
+                <CheckCircle2 size={14} />
+                Zero fees · Instant settlement
+              </div>
+              <button type="submit" className="btn-primary w-full" disabled={loading}>
+                {loading
+                  ? <Loader2 size={16} className="animate-spin" />
+                  : <><Send size={16} /> Send ARCX</>}
+              </button>
+            </form>
+          )}
+        </div>
+
+        {/* ── Right: transaction history ─────────────────────────────── */}
+        <div className="lg:col-span-3 card p-5">
+          <div className="flex items-center justify-between mb-4">
+            <h3 className="font-display font-semibold text-base text-slate-900">
+              Recent Transactions
+            </h3>
+            <div className="flex items-center gap-1.5 text-xs text-slate-400">
+              <Clock size={12} />
+              Last 30
+            </div>
+          </div>
+
+          {txLoad ? (
+            <div className="flex items-center justify-center py-16 text-slate-400 text-sm gap-2">
+              <Loader2 size={16} className="animate-spin" />
+              Loading…
+            </div>
+          ) : txns.length === 0 ? (
+            <div className="flex flex-col items-center justify-center py-16 text-slate-400">
+              <ArrowLeftRight size={28} className="mb-3 opacity-30" />
+              <p className="text-sm">No transactions yet.</p>
+              <p className="text-xs mt-1">Make your first deposit to get started.</p>
+            </div>
+          ) : (
+            <div className="divide-y divide-slate-50">
+              {txns.map(tx => <TxRow key={tx.id} tx={tx} />)}
+            </div>
+          )}
+        </div>
+      </div>
+    </div>
+  )
+}
+
+----
+kycpage.jsx
+
+import { useState, useEffect } from 'react'
+import { Shield, CheckCircle, Clock, ChevronRight, FileText, CreditCard, BookOpen, Car } from 'lucide-react'
+import { kycApi } from '../api'
+import useStore from '../store/useStore'
+import { formatDate } from '../utils/format'
+import clsx from 'clsx'
+
+const TIERS = [
+  {
+    id:    'tier_1',
+    label: 'Tier 1 — Basic',
+    limit: '₹10,000 / day',
+    docs:  [
+      { value: 'aadhaar', label: 'Aadhaar Card', icon: CreditCard },
+      { value: 'dl',      label: 'Driving License', icon: Car },
+    ],
+  },
+  {
+    id:    'tier_2',
+    label: 'Tier 2 — Standard',
+    limit: '₹1,00,000 / day',
+    docs:  [
+      { value: 'pan',      label: 'PAN Card', icon: CreditCard },
+      { value: 'passport', label: 'Passport', icon: BookOpen },
+    ],
+  },
+  {
+    id:    'tier_3',
+    label: 'Tier 3 — Full',
+    limit: 'Unlimited',
+    docs:  [
+      { value: 'passport', label: 'Passport', icon: BookOpen },
+    ],
+  },
+]
+
+const STATUS_ICON = {
+  approved: <CheckCircle size={14} className="text-emerald-400" />,
+  pending:  <Clock       size={14} className="text-amber-400" />,
+  rejected: <span className="text-xs text-red-400 font-medium">✗</span>,
+}
+
+export default function KYCPage() {
+  const { user, loadUser } = useStore()
+  const [kycData, setKycData]     = useState(null)
+  const [step, setStep]           = useState(0)   // 0=choose tier, 1=choose doc, 2=enter ref, 3=done
+  const [selectedTier, setTier]   = useState(null)
+  const [selectedDoc, setDoc]     = useState(null)
+  const [docRef, setDocRef]       = useState('')
+  const [loading, setLoading]     = useState(false)
+  const [error, setError]         = useState('')
+
+  const loadKYC = async () => {
+    try {
+      const d = await kycApi.status()
+      setKycData(d)
+    } catch {}
+  }
+
+  useEffect(() => { loadKYC() }, [])
+
+  const handleSubmit = async () => {
+    if (!docRef.trim()) { setError('Enter the document reference ID.'); return }
+    setLoading(true); setError('')
+    try {
+      await kycApi.submit({
+        tier:          selectedTier.id,
+        document_type: selectedDoc.value,
+        document_ref:  docRef,
+      })
+      await loadKYC()
+      await loadUser()
+      setStep(3)
+    } catch (e) {
+      setError(e.response?.data?.error || 'Submission failed. Try again.')
+    }
+    setLoading(false)
+  }
+
+  const reset = () => {
+    setStep(0); setTier(null); setDoc(null); setDocRef(''); setError('')
+  }
+
+  const approvedTiers = kycData?.records?.filter(r => r.status === 'approved').map(r => r.tier) || []
+
+  return (
+    <div className="p-8 max-w-3xl mx-auto">
+      <div className="mb-8 animate-fade-up">
+        <h1 className="font-display text-3xl text-slate-100">KYC Verification</h1>
+        <p className="text-slate-500 text-sm mt-1">
+          Complete identity verification to unlock higher transaction limits
+        </p>
+      </div>
+
+      {/* Current status card */}
+      <div className="bg-vault-card border border-vault-border rounded-xl p-5 mb-6 animate-fade-up">
+        <div className="flex items-center justify-between">
+          <div>
+            <div className="text-xs text-slate-500 uppercase tracking-widest mb-1">Current Status</div>
+            <div className="flex items-center gap-2">
+              <Shield size={16} className={kycData?.kyc_status === 'approved' ? 'text-emerald-400' : 'text-slate-500'} />
+              <span className={clsx(
+                'font-medium capitalize',
+                kycData?.kyc_status === 'approved' ? 'text-emerald-400' : 'text-amber-400'
+              )}>
+                {kycData?.kyc_status || 'Pending'}
+              </span>
+            </div>
+          </div>
+          <div className="text-right">
+            <div className="text-xs text-slate-500 mb-1">Daily Limit</div>
+            <div className="font-display text-lg text-gold">
+              {kycData?.daily_limit_inr || '₹0'}
+            </div>
+          </div>
+        </div>
+
+        {/* Tier progress */}
+        <div className="mt-4 flex gap-2">
+          {TIERS.map(t => {
+            const isApproved = approvedTiers.includes(t.id)
+            return (
+              <div key={t.id} className={clsx(
+                'flex-1 p-2.5 rounded-lg border text-xs text-center transition-all',
+                isApproved
+                  ? 'bg-emerald-500/10 border-emerald-500/20 text-emerald-400'
+                  : 'bg-vault border-vault-border text-slate-600'
+              )}>
+                <div className="font-medium mb-0.5">{t.id.replace('_', ' ').toUpperCase()}</div>
+                <div className="text-xs opacity-70">{t.limit}</div>
+                {isApproved && <CheckCircle size={12} className="mx-auto mt-1" />}
+              </div>
+            )
+          })}
+        </div>
+      </div>
+
+      {/* Past submissions */}
+      {kycData?.records?.length > 0 && (
+        <div className="bg-vault-card border border-vault-border rounded-xl p-5 mb-6 animate-fade-up delay-100">
+          <h2 className="text-sm font-medium text-slate-300 mb-3">Submission History</h2>
+          <div className="space-y-2">
+            {kycData.records.map(r => (
+              <div key={r.id} className="flex items-center justify-between py-2 border-b border-vault-border last:border-0">
+                <div className="flex items-center gap-2">
+                  {STATUS_ICON[r.status]}
+                  <span className="text-sm text-slate-300 capitalize">{r.tier.replace('_', ' ')}</span>
+                  <span className="text-xs text-slate-600">· {r.document_type}</span>
+                </div>
+                <span className="text-xs text-slate-600">{formatDate(r.submitted_at)}</span>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* KYC Wizard */}
+      {step < 3 && (
+        <div className="bg-vault-card border border-vault-border rounded-xl overflow-hidden animate-fade-up delay-200">
+
+          {/* Step indicator */}
+          <div className="flex border-b border-vault-border">
+            {['Choose Tier', 'Choose Document', 'Submit'].map((s, i) => (
+              <div key={i} className={clsx(
+                'flex-1 py-3 text-center text-xs font-medium border-b-2 transition-all',
+                step === i ? 'border-gold text-gold' : 'border-transparent text-slate-600'
+              )}>
+                <span className={clsx('mr-1.5 inline-flex w-4 h-4 rounded-full text-xs items-center justify-center',
+                  step > i ? 'bg-emerald-500 text-white' : step === i ? 'bg-gold text-vault-surface' : 'bg-vault text-slate-600'
+                )}>{step > i ? '✓' : i + 1}</span>
+                {s}
+              </div>
+            ))}
+          </div>
+
+          <div className="p-6">
+
+            {/* Step 0: Choose tier */}
+            {step === 0 && (
+              <div className="space-y-3">
+                <p className="text-sm text-slate-400 mb-4">Select the KYC tier you want to complete.</p>
+                {TIERS.map(t => {
+                  const isApproved = approvedTiers.includes(t.id)
+                  return (
+                    <button
+                      key={t.id}
+                      disabled={isApproved}
+                      onClick={() => { setTier(t); setStep(1) }}
+                      className={clsx(
+                        'w-full flex items-center justify-between p-4 rounded-xl border text-left transition-all',
+                        isApproved
+                          ? 'border-emerald-500/20 bg-emerald-500/5 opacity-60 cursor-not-allowed'
+                          : 'border-vault-border hover:border-gold/40 hover:bg-white/5 cursor-pointer'
+                      )}
+                    >
+                      <div>
+                        <div className="text-sm font-medium text-slate-200 flex items-center gap-2">
+                          {t.label}
+                          {isApproved && <CheckCircle size={13} className="text-emerald-400" />}
+                        </div>
+                        <div className="text-xs text-slate-500 mt-0.5">Daily limit: {t.limit}</div>
+                      </div>
+                      {!isApproved && <ChevronRight size={16} className="text-slate-600" />}
+                    </button>
+                  )
+                })}
+              </div>
+            )}
+
+            {/* Step 1: Choose document */}
+            {step === 1 && selectedTier && (
+              <div className="space-y-3">
+                <p className="text-sm text-slate-400 mb-4">
+                  Select a document for <span className="text-gold">{selectedTier.label}</span>
+                </p>
+                {selectedTier.docs.map(doc => {
+                  const Icon = doc.icon
+                  return (
+                    <button
+                      key={doc.value}
+                      onClick={() => { setDoc(doc); setStep(2) }}
+                      className="w-full flex items-center gap-3 p-4 rounded-xl border border-vault-border hover:border-gold/40 hover:bg-white/5 text-left transition-all"
+                    >
+                      <Icon size={18} className="text-slate-400 flex-shrink-0" />
+                      <span className="text-sm text-slate-200">{doc.label}</span>
+                      <ChevronRight size={16} className="text-slate-600 ml-auto" />
+                    </button>
+                  )
+                })}
+                <button onClick={() => setStep(0)} className="text-xs text-slate-600 hover:text-slate-400 mt-2">
+                  ← Back
+                </button>
+              </div>
+            )}
+
+            {/* Step 2: Enter reference */}
+            {step === 2 && selectedDoc && (
+              <div className="space-y-4">
+                <div>
+                  <p className="text-sm text-slate-400 mb-1">
+                    Enter the reference ID for your <span className="text-gold">{selectedDoc.label}</span>
+                  </p>
+                  <p className="text-xs text-slate-600 mb-4">
+                    In production, this comes from DigiLocker / KYC provider. For demo, use any string like <code className="text-gold font-mono">DEMO_REF_001</code>
+                  </p>
+                </div>
+                <div>
+                  <label className="block text-xs text-slate-500 mb-1.5 uppercase tracking-wider">Document Reference ID</label>
+                  <input
+                    type="text"
+                    value={docRef}
+                    onChange={e => setDocRef(e.target.value)}
+                    placeholder="e.g. DEMO_REF_001"
+                    className="w-full bg-vault border border-vault-border rounded-lg px-3.5 py-3 text-slate-200 font-mono text-sm focus:border-gold transition-colors"
+                  />
+                </div>
+                {error && (
+                  <div className="text-xs text-red-400 bg-red-500/10 border border-red-500/20 rounded-lg p-3">
+                    {error}
+                  </div>
+                )}
+                <div className="flex gap-3">
+                  <button onClick={() => setStep(1)} className="text-xs text-slate-600 hover:text-slate-400">
+                    ← Back
+                  </button>
+                  <button
+                    onClick={handleSubmit}
+                    disabled={loading}
+                    className="flex-1 py-3 bg-gold text-vault-surface font-medium rounded-lg text-sm hover:bg-gold-light transition-colors disabled:opacity-40"
+                  >
+                    {loading ? 'Submitting…' : 'Submit KYC'}
+                  </button>
+                </div>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* Step 3: Success */}
+      {step === 3 && (
+        <div className="bg-vault-card border border-emerald-500/20 rounded-xl p-8 text-center animate-fade-up">
+          <CheckCircle size={40} className="text-emerald-400 mx-auto mb-4" />
+          <h3 className="font-display text-xl text-slate-100 mb-2">KYC Approved</h3>
+          <p className="text-sm text-slate-400 mb-6">
+            Your {selectedTier?.id} has been verified. Transaction limits updated.
+          </p>
+          <button
+            onClick={reset}
+            className="px-6 py-2.5 bg-vault border border-vault-border text-slate-300 rounded-lg text-sm hover:bg-white/5 transition-colors"
+          >
+            Submit another tier
+          </button>
+        </div>
+      )}
+    </div>
+  )
+}

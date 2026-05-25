@@ -40,26 +40,17 @@ Full endpoint map:
 """
 
 from django.contrib import admin
-from django.urls import path
-from arcx_core.views.wallet_views  import WalletBalanceView, DepositView, WithdrawView, TransactionHistoryView
-from arcx_core.views.oracle_views  import LivePriceView, NAVHistoryView, TodayNAVView
-from arcx_core.views.transfer_views import TransferView
+from django.urls import path, include
+from rest_framework_simplejwt.views import TokenObtainPairView, TokenRefreshView
 
 urlpatterns = [
     # ── Django Admin ──────────────────────────────────────────────────────
     path("admin/", admin.site.urls),
 
-    # ── Wallet ────────────────────────────────────────────────────────────
-    path("api/v1/wallet/",          WalletBalanceView.as_view(),      name="wallet_balance"),
-    path("api/v1/wallet/deposit",   DepositView.as_view(),            name="wallet_deposit"),
-    path("api/v1/wallet/withdraw",  WithdrawView.as_view(),           name="wallet_withdraw"),
-    path("api/v1/wallet/history",   TransactionHistoryView.as_view(), name="wallet_history"),
+    # ── ARCX API v1 ───────────────────────────────────────────────────────
+    path("api/v1/", include("arcx_core.urls")),
 
-    # ── Transfer ──────────────────────────────────────────────────────────
-    path("api/v1/transfer/",        TransferView.as_view(),           name="transfer"),
-
-    # ── Oracle & NAV ──────────────────────────────────────────────────────
-    path("api/v1/oracle/price",     LivePriceView.as_view(),          name="oracle_price"),
-    path("api/v1/nav/history",      NAVHistoryView.as_view(),         name="nav_history"),
-    path("api/v1/nav/today",        TodayNAVView.as_view(),           name="nav_today"),
+    # ── Auth (JWT) ────────────────────────────────────────────────────────
+    path("api/auth/token/", TokenObtainPairView.as_view(), name="token_obtain_pair"),
+    path("api/auth/token/refresh/", TokenRefreshView.as_view(), name="token_refresh"),
 ]

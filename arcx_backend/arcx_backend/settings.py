@@ -41,8 +41,10 @@ INSTALLED_APPS = [
     # Add your nested app here
     #phase 3 dependencies
 
+    "corsheaders",
     "rest_framework",
     "rest_framework_simplejwt",
+    "rest_framework_simplejwt.token_blacklist",
     "arcx_core",
 ]
 
@@ -50,6 +52,7 @@ MIDDLEWARE = [
     "arcx_core.middleware.RequestLoggingMiddleware", # <-- ADD THIS FIRST
     'django.middleware.security.SecurityMiddleware',
     'django.contrib.sessions.middleware.SessionMiddleware',
+    "corsheaders.middleware.CorsMiddleware",          # Phase 7 — CORS for React frontend
     'django.middleware.common.CommonMiddleware',
     'django.middleware.csrf.CsrfViewMiddleware',
     'django.contrib.auth.middleware.AuthenticationMiddleware',
@@ -57,6 +60,18 @@ MIDDLEWARE = [
     'django.middleware.clickjacking.XFrameOptionsMiddleware',
 
     "arcx_core.middleware.IdempotencyMiddleware",   # Phase 3 custom
+]
+
+# ── CORS — Phase 7 (React frontend on Vite dev server) ───────────────────────
+CORS_ALLOWED_ORIGINS = [
+    "http://localhost:5173",   # Vite dev server
+    "http://127.0.0.1:5173",
+]
+CORS_ALLOW_HEADERS = [
+    "authorization",
+    "content-type",
+    "idempotency-key",
+    "x-requested-with",
 ]
 
 ROOT_URLCONF = 'arcx_backend.urls'
@@ -146,6 +161,12 @@ AUTH_PASSWORD_VALIDATORS = [
     {
         'NAME': 'django.contrib.auth.password_validation.NumericPasswordValidator',
     },
+]
+
+# ── Custom Authentication ─────────────────────────────────────────────────────
+AUTHENTICATION_BACKENDS = [
+    'arcx_core.auth_backend.EmailAuthBackend',
+    'django.contrib.auth.backends.ModelBackend',
 ]
 
 
