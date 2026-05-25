@@ -154,17 +154,17 @@ function OnboardingCarousel() {
           
           <div className="w-full max-w-sm space-y-3 mb-12">
             {[
-              { label: 'Stocks', value: '35%', color: '#324A8D' },
-              { label: 'Bonds', value: '25%', color: '#C5A059' },
-              { label: 'Crypto', value: '20%', color: '#8E44AD' },
-              { label: 'Cash', value: '20%', color: '#30D158' },
+              { label: 'Stocks', value: '40%', color: '#324A8D' },
+              { label: 'Bonds', value: '30%', color: '#C5A059' },
+              { label: 'Gold', value: '20%', color: '#8E44AD' },
+              { label: 'Cash Reserves', value: '10%', color: '#30D158' },
             ].map(asset => (
               <div key={asset.label} className="flex items-center justify-between p-4 rounded-2xl bg-[#111111]/80 border border-white/5 backdrop-blur-md">
                 <div className="flex items-center gap-4">
                   <div className="w-3 h-3 rounded-full" style={{ backgroundColor: asset.color }} />
                   <span className="text-text-primary font-medium">{asset.label}</span>
                 </div>
-                <span className="text-text-primary font-semibold font-mono">{asset.value}</span>
+                <span className="text-text-primary font-semibold ">{asset.value}</span>
               </div>
             ))}
           </div>

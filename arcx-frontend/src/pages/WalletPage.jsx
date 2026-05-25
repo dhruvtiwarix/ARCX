@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react'
 import { ArrowDownLeft, ArrowUpRight, Send, Clock, Loader2,
-         CheckCircle2, XCircle, ArrowLeftRight } from 'lucide-react'
+         CheckCircle2, XCircle, ArrowLeftRight, Landmark } from 'lucide-react'
 import { walletApi, oracleApi } from '../api/index'
 import { useAuthStore } from '../store/authStore'
 import { format } from 'date-fns'
@@ -12,26 +12,24 @@ function genKey() {
   })
 }
 
-// ── Action tab component ──────────────────────────────────────────────────────
+// ── iOS Segmented Control ──────────────────────────────────────────────────
 function ActionTabs({ active, onSelect }) {
   const tabs = [
-    { id: 'deposit',  label: 'Deposit',  icon: ArrowDownLeft  },
-    { id: 'withdraw', label: 'Withdraw', icon: ArrowUpRight    },
-    { id: 'transfer', label: 'Transfer', icon: Send            },
+    { id: 'deposit',  label: 'Deposit' },
+    { id: 'withdraw', label: 'Withdraw' },
+    { id: 'transfer', label: 'Transfer' },
   ]
   return (
-    <div className="flex gap-2">
-      {tabs.map(({ id, label, icon: Icon }) => (
+    <div className="flex bg-slate-100 dark:bg-black/50 p-1 rounded-xl border border-black/5 dark:border-white/5 mb-6 transition-colors">
+      {tabs.map(({ id, label }) => (
         <button
           key={id}
           onClick={() => onSelect(id)}
-          className={`flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-medium
-                      transition-all duration-150 border
+          className={`flex-1 py-2 text-xs font-bold uppercase tracking-widest rounded-lg transition-all duration-300
             ${active === id
-              ? 'bg-arcx-600 text-white border-arcx-600'
-              : 'bg-white text-slate-600 border-slate-200 hover:border-arcx-300'}`}
+              ? 'bg-white dark:bg-white/10 text-[#1D1D1F] dark:text-[#F5F5F7] shadow-sm'
+              : 'text-slate-500 hover:text-slate-800 dark:hover:text-slate-300'}`}
         >
-          <Icon size={15} />
           {label}
         </button>
       ))}
@@ -43,10 +41,10 @@ function ActionTabs({ active, onSelect }) {
 function Flash({ type, msg }) {
   if (!msg) return null
   return (
-    <div className={`flex items-center gap-2 rounded-xl px-4 py-3 text-sm font-medium
+    <div className={`flex items-center gap-2 rounded-xl px-4 py-3 text-sm font-medium mb-6 animate-fade-in transition-colors
       ${type === 'ok'
-        ? 'bg-emerald-50 border border-emerald-200 text-emerald-700'
-        : 'bg-red-50 border border-red-100 text-red-600'}`}>
+        ? 'bg-emerald-100 dark:bg-emerald-500/10 border border-emerald-200 dark:border-emerald-500/20 text-emerald-700 dark:text-emerald-400'
+        : 'bg-red-100 dark:bg-red-500/10 border border-red-200 dark:border-red-500/20 text-red-700 dark:text-red-400'}`}>
       {type === 'ok'
         ? <CheckCircle2 size={16} className="flex-shrink-0" />
         : <XCircle size={16} className="flex-shrink-0" />}
@@ -57,10 +55,10 @@ function Flash({ type, msg }) {
 
 // ── Transaction row ───────────────────────────────────────────────────────────
 const TX_META = {
-  deposit:  { label: 'Deposit',  color: 'text-emerald-600', bg: 'bg-emerald-50', icon: ArrowDownLeft },
-  withdraw: { label: 'Withdraw', color: 'text-red-500',     bg: 'bg-red-50',     icon: ArrowUpRight  },
-  transfer: { label: 'Transfer', color: 'text-arcx-600',    bg: 'bg-arcx-50',    icon: ArrowLeftRight },
-  dividend: { label: 'Dividend', color: 'text-sky-600',     bg: 'bg-sky-50',     icon: ArrowDownLeft  },
+  deposit:  { label: 'Fiat Deposit',  colorLight: 'text-emerald-600', colorDark: 'dark:text-emerald-400', bgLight: 'bg-emerald-100', bgDark: 'dark:bg-emerald-500/10', icon: ArrowDownLeft },
+  withdraw: { label: 'Withdrawal',    colorLight: 'text-[#1D1D1F]',   colorDark: 'dark:text-[#F5F5F7]',       bgLight: 'bg-slate-200',   bgDark: 'dark:bg-white/10',     icon: ArrowUpRight  },
+  transfer: { label: 'Transfer',      colorLight: 'text-[#C5A059]',   colorDark: 'dark:text-arcx-gold',   bgLight: 'bg-arcx-gold/20',bgDark: 'dark:bg-arcx-gold/10', icon: Send },
+  dividend: { label: 'Yield Dividend',colorLight: 'text-[#C5A059]',   colorDark: 'dark:text-arcx-gold',   bgLight: 'bg-arcx-gold/20',bgDark: 'dark:bg-arcx-gold/10', icon: ArrowDownLeft  },
 }
 
 function TxRow({ tx }) {
@@ -69,30 +67,33 @@ function TxRow({ tx }) {
   const amt  = Number(tx.amount_arcx)
 
   return (
-    <div className="flex items-center gap-4 py-3.5 border-b border-slate-50 last:border-0">
-      <div className={`w-9 h-9 rounded-xl flex items-center justify-center ${meta.bg}`}>
-        <Icon size={16} className={meta.color} />
-      </div>
-      <div className="flex-1 min-w-0">
-        <p className="text-sm font-medium text-slate-800">{meta.label}</p>
-        <p className="text-xs text-slate-400 mt-0.5">
-          NAV ₹{Number(tx.nav_at_tx).toFixed(4)} ·{' '}
-          {format(new Date(tx.created_at), 'dd MMM, hh:mm a')}
-        </p>
+    <div className="flex items-center justify-between p-4 border-b border-black/5 dark:border-white/5 hover:bg-slate-50 dark:hover:bg-white/5 transition-colors cursor-pointer group">
+      <div className="flex items-center gap-4">
+        <div className={`w-10 h-10 rounded-full flex items-center justify-center flex-shrink-0 transition-colors ${meta.bgLight} ${meta.bgDark}`}>
+          <Icon size={16} className={`${meta.colorLight} ${meta.colorDark} transition-colors`} />
+        </div>
+        <div>
+          <p className="text-sm font-bold text-[#1D1D1F] dark:text-[#F5F5F7] group-hover:text-arcx-gold transition-colors">{meta.label}</p>
+          <p className="text-xs text-slate-500 mt-0.5 transition-colors">
+            {format(new Date(tx.created_at), 'MMM dd, hh:mm a')}
+          </p>
+        </div>
       </div>
       <div className="text-right">
-        <p className={`text-sm font-semibold font-mono ${amt >= 0 ? 'text-emerald-600' : 'text-red-500'}`}>
+        <p className={`text-sm font-bold transition-colors ${amt >= 0 ? 'text-emerald-600 dark:text-emerald-400' : 'text-[#1D1D1F] dark:text-[#F5F5F7]'}`}>
           {amt >= 0 ? '+' : ''}{amt.toFixed(6)} ARCX
         </p>
-        {Number(tx.amount_inr) !== 0 && (
-          <p className="text-xs text-slate-400 mt-0.5">
-            ₹{Number(tx.amount_inr).toLocaleString('en-IN', { maximumFractionDigits: 2 })}
-          </p>
-        )}
+        <div className="flex items-center justify-end gap-2 mt-0.5">
+          {Number(tx.amount_inr) !== 0 && (
+            <p className="text-xs text-slate-500 transition-colors">
+              ₹{Number(tx.amount_inr).toLocaleString('en-IN', { maximumFractionDigits: 2 })}
+            </p>
+          )}
+          <span className={`px-1.5 py-0.5 rounded text-[9px] uppercase tracking-wider font-bold transition-colors ${tx.status === 'completed' ? 'bg-emerald-100 dark:bg-emerald-500/20 text-emerald-700 dark:text-emerald-400' : 'bg-slate-200 dark:bg-slate-500/20 text-slate-600 dark:text-slate-400'}`}>
+            {tx.status}
+          </span>
+        </div>
       </div>
-      <span className={`badge ml-2 ${tx.status === 'completed' ? 'badge-green' : 'badge-gray'}`}>
-        {tx.status}
-      </span>
     </div>
   )
 }
@@ -182,169 +183,151 @@ export default function WalletPage() {
     setLoading(false)
   }
 
-  // Estimated ARCX for deposit preview
   const estimatedArcx = nav && form.amount_inr
     ? (Number(form.amount_inr) / nav).toFixed(6)
     : null
 
-  // Estimated INR for withdraw preview
   const estimatedInr = nav && form.amount_arcx
     ? (Number(form.amount_arcx) * nav).toFixed(2)
     : null
 
   return (
-    <div className="space-y-6 animate-fade-in">
-      <div>
-        <h1 className="font-display font-semibold text-2xl text-slate-900">Wallet</h1>
-        <p className="text-sm text-slate-500 mt-0.5">Deposit, withdraw, or transfer ARCX instantly</p>
+    <div className="animate-fade-in pb-12 transition-colors duration-300">
+      
+      {/* Header */}
+      <div className="mb-10">
+        <h1 className="font-display font-bold text-[28px] text-[#1D1D1F] dark:text-[#F5F5F7] transition-colors">Wallet</h1>
+        <p className="text-sm text-slate-500 mt-1 transition-colors">Move your funds. Instant settlement globally.</p>
       </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-5 gap-6">
+      <div className="grid grid-cols-1 lg:grid-cols-5 gap-8">
 
-        {/* ── Left: action panel ─────────────────────────────────────── */}
-        <div className="lg:col-span-2 space-y-4">
-
-          {/* Balance card */}
-          <div className="card p-5 bg-vault text-white">
-            <p className="text-slate-400 text-xs uppercase tracking-wider mb-2">ARCX Balance</p>
-            <p className="font-display font-bold text-3xl">{balance.toFixed(6)}</p>
-            {nav && (
-              <p className="text-slate-400 text-sm mt-1">
-                ≈ ₹{(balance * nav).toLocaleString('en-IN', { maximumFractionDigits: 2 })}
-              </p>
-            )}
-          </div>
-
-          {/* Action tabs */}
-          <ActionTabs active={tab} onSelect={setTab} />
-
-          {flash && <Flash type={flash.type} msg={flash.msg} />}
-
-          {/* Forms */}
-          {tab === 'deposit' && (
-            <form onSubmit={handleDeposit} className="card p-5 space-y-4">
-              <div>
-                <label className="block text-sm font-medium text-slate-700 mb-1.5">
-                  Amount in INR
-                </label>
-                <div className="relative">
-                  <span className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400 text-sm">₹</span>
-                  <input className="input pl-7" type="number" name="amount_inr"
-                         value={form.amount_inr} onChange={handleChange}
-                         placeholder="1000.00" min="100" step="0.01" required />
-                </div>
-                {estimatedArcx && (
-                  <p className="text-xs text-arcx-600 mt-1.5 font-medium">
-                    ≈ {estimatedArcx} ARCX at live NAV ₹{nav?.toFixed(4)}
-                  </p>
-                )}
+        {/* ── Left: Action Panel ─────────────────────────────────────── */}
+        <div className="lg:col-span-2">
+          
+          <div className="bg-white dark:bg-[#1C1C1E] border border-black/5 dark:border-white/5 rounded-[24px] p-6 max-w-md mx-auto lg:mx-0 shadow-sm dark:shadow-2xl transition-colors duration-300">
+            
+            {/* Balance Card inside Action Panel */}
+            <div className="bg-slate-100 dark:bg-gradient-to-br dark:from-[#2C2C2E] dark:to-[#1C1C1E] border border-black/5 dark:border-white/10 rounded-xl p-5 mb-8 shadow-inner relative overflow-hidden transition-colors duration-300">
+              <div className="absolute top-0 right-0 p-4 opacity-10 text-slate-900 dark:text-[#F5F5F7]">
+                <Landmark size={64} />
               </div>
-              {!kyc_ok && (
-                <p className="text-xs text-amber-600 bg-amber-50 border border-amber-100 rounded-lg px-3 py-2">
-                  KYC verification required to deposit.
+              <p className="text-[10px] text-slate-500 uppercase tracking-widest font-bold mb-2">Available Balance</p>
+              <p className="font-display font-light text-4xl text-[#1D1D1F] dark:text-[#F5F5F7] tracking-tight transition-colors">{balance.toFixed(6)}</p>
+              {nav && (
+                <p className="text-sm font-medium text-[#C5A059] dark:text-arcx-gold mt-1 transition-colors">
+                  ≈ ₹{(balance * nav).toLocaleString('en-IN', { maximumFractionDigits: 2 })}
                 </p>
               )}
-              <button type="submit" className="btn-primary w-full" disabled={loading || !kyc_ok}>
-                {loading
-                  ? <Loader2 size={16} className="animate-spin" />
-                  : <><ArrowDownLeft size={16} /> Deposit</>}
-              </button>
-            </form>
-          )}
+            </div>
 
-          {tab === 'withdraw' && (
-            <form onSubmit={handleWithdraw} className="card p-5 space-y-4">
-              <div>
-                <label className="block text-sm font-medium text-slate-700 mb-1.5">
-                  Amount in ARCX
-                </label>
-                <div className="relative">
-                  <input className="input pr-14" type="number" name="amount_arcx"
-                         value={form.amount_arcx} onChange={handleChange}
-                         placeholder="10.00" min="0.01" step="0.000001" required />
-                  <span className="absolute right-3.5 top-1/2 -translate-y-1/2 text-slate-400 text-xs font-medium">ARCX</span>
+            <ActionTabs active={tab} onSelect={setTab} />
+            {flash && <Flash type={flash.type} msg={flash.msg} />}
+
+            {/* Forms */}
+            {tab === 'deposit' && (
+              <form onSubmit={handleDeposit} className="space-y-5 animate-fade-in">
+                <div>
+                  <label className="block text-[11px] font-bold text-slate-500 uppercase tracking-widest mb-2">
+                    Amount in INR
+                  </label>
+                  <div className="relative">
+                    <span className="absolute left-4 top-1/2 -translate-y-1/2 text-[#1D1D1F] dark:text-[#F5F5F7] font-medium transition-colors">₹</span>
+                    <input className="w-full bg-slate-50 dark:bg-black/50 border border-black/10 dark:border-white/10 rounded-xl py-3 pl-9 pr-4 text-[#1D1D1F] dark:text-[#F5F5F7] placeholder:text-slate-400 dark:placeholder:text-slate-600 focus:outline-none focus:border-[#C5A059] dark:focus:border-arcx-gold transition-colors font-mono text-lg" 
+                           type="number" name="amount_inr" value={form.amount_inr} onChange={handleChange} placeholder="1000.00" min="100" step="0.01" required />
+                  </div>
+                  {estimatedArcx && (
+                    <p className="text-xs text-[#C5A059] dark:text-arcx-gold mt-2 font-medium flex items-center gap-1 transition-colors">
+                      <ArrowDownLeft size={12} /> Receives ≈ {estimatedArcx} ARCX
+                    </p>
+                  )}
                 </div>
-                {estimatedInr && (
-                  <p className="text-xs text-arcx-600 mt-1.5 font-medium">
-                    ≈ ₹{Number(estimatedInr).toLocaleString('en-IN')} at live NAV ₹{nav?.toFixed(4)}
+                {!kyc_ok && (
+                  <p className="text-[11px] text-amber-600 dark:text-amber-400 bg-amber-50 dark:bg-amber-500/10 border border-amber-200 dark:border-amber-500/20 rounded-lg px-3 py-2 font-medium transition-colors">
+                    KYC verification required to deposit.
                   </p>
                 )}
-              </div>
-              <button type="submit" className="btn-primary w-full" disabled={loading}>
-                {loading
-                  ? <Loader2 size={16} className="animate-spin" />
-                  : <><ArrowUpRight size={16} /> Withdraw</>}
-              </button>
-            </form>
-          )}
+                <button type="submit" className="w-full py-3.5 bg-[#1D1D1F] dark:bg-white text-white dark:text-black font-bold rounded-xl hover:bg-black dark:hover:bg-slate-200 transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2" disabled={loading || !kyc_ok}>
+                  {loading ? <Loader2 size={18} className="animate-spin" /> : 'Deposit Funds'}
+                </button>
+              </form>
+            )}
 
-          {tab === 'transfer' && (
-            <form onSubmit={handleTransfer} className="card p-5 space-y-4">
-              <div>
-                <label className="block text-sm font-medium text-slate-700 mb-1.5">Recipient email</label>
-                <input className="input" type="email" name="to_user_email"
-                       value={form.to_user_email} onChange={handleChange}
-                       placeholder="friend@example.com" required />
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-slate-700 mb-1.5">Amount (ARCX)</label>
-                <div className="relative">
-                  <input className="input pr-14" type="number" name="amount_arcx"
-                         value={form.amount_arcx} onChange={handleChange}
-                         placeholder="5.00" min="0.000001" step="0.000001" required />
-                  <span className="absolute right-3.5 top-1/2 -translate-y-1/2 text-slate-400 text-xs font-medium">ARCX</span>
+            {tab === 'withdraw' && (
+              <form onSubmit={handleWithdraw} className="space-y-5 animate-fade-in">
+                <div>
+                  <label className="block text-[11px] font-bold text-slate-500 uppercase tracking-widest mb-2">
+                    Amount in ARCX
+                  </label>
+                  <div className="relative">
+                    <input className="w-full bg-slate-50 dark:bg-black/50 border border-black/10 dark:border-white/10 rounded-xl py-3 pl-4 pr-16 text-[#1D1D1F] dark:text-[#F5F5F7] placeholder:text-slate-400 dark:placeholder:text-slate-600 focus:outline-none focus:border-[#C5A059] dark:focus:border-arcx-gold transition-colors font-mono text-lg" 
+                           type="number" name="amount_arcx" value={form.amount_arcx} onChange={handleChange} placeholder="10.00" min="0.01" step="0.000001" required />
+                    <span className="absolute right-4 top-1/2 -translate-y-1/2 text-slate-500 font-bold text-xs uppercase transition-colors">ARCX</span>
+                  </div>
+                  {estimatedInr && (
+                    <p className="text-xs text-[#C5A059] dark:text-arcx-gold mt-2 font-medium flex items-center gap-1 transition-colors">
+                      <ArrowUpRight size={12} /> Withdraws ≈ ₹{Number(estimatedInr).toLocaleString('en-IN')}
+                    </p>
+                  )}
                 </div>
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-slate-700 mb-1.5">
-                  Note <span className="text-slate-400">(optional)</span>
-                </label>
-                <input className="input" type="text" name="note"
-                       value={form.note} onChange={handleChange}
-                       placeholder="Splitting dinner" maxLength={140} />
-              </div>
-              <div className="bg-emerald-50 border border-emerald-100 rounded-xl px-4 py-2.5 text-sm text-emerald-700 font-medium flex items-center gap-2">
-                <CheckCircle2 size={14} />
-                Zero fees · Instant settlement
-              </div>
-              <button type="submit" className="btn-primary w-full" disabled={loading}>
-                {loading
-                  ? <Loader2 size={16} className="animate-spin" />
-                  : <><Send size={16} /> Send ARCX</>}
-              </button>
-            </form>
-          )}
-        </div>
+                <button type="submit" className="w-full py-3.5 bg-[#1D1D1F] dark:bg-white text-white dark:text-black font-bold rounded-xl hover:bg-black dark:hover:bg-slate-200 transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2" disabled={loading}>
+                  {loading ? <Loader2 size={18} className="animate-spin" /> : 'Withdraw to Bank'}
+                </button>
+              </form>
+            )}
 
-        {/* ── Right: transaction history ─────────────────────────────── */}
-        <div className="lg:col-span-3 card p-5">
-          <div className="flex items-center justify-between mb-4">
-            <h3 className="font-display font-semibold text-base text-slate-900">
-              Recent Transactions
-            </h3>
-            <div className="flex items-center gap-1.5 text-xs text-slate-400">
-              <Clock size={12} />
-              Last 30
-            </div>
+            {tab === 'transfer' && (
+              <form onSubmit={handleTransfer} className="space-y-5 animate-fade-in">
+                <div>
+                  <label className="block text-[11px] font-bold text-slate-500 uppercase tracking-widest mb-2">Recipient Email</label>
+                  <input className="w-full bg-slate-50 dark:bg-black/50 border border-black/10 dark:border-white/10 rounded-xl py-3 px-4 text-[#1D1D1F] dark:text-[#F5F5F7] placeholder:text-slate-400 dark:placeholder:text-slate-600 focus:outline-none focus:border-[#C5A059] dark:focus:border-arcx-gold transition-colors text-sm" 
+                         type="email" name="to_user_email" value={form.to_user_email} onChange={handleChange} placeholder="friend@arcx.com" required />
+                </div>
+                <div>
+                  <label className="block text-[11px] font-bold text-slate-500 uppercase tracking-widest mb-2">Amount (ARCX)</label>
+                  <div className="relative">
+                    <input className="w-full bg-slate-50 dark:bg-black/50 border border-black/10 dark:border-white/10 rounded-xl py-3 pl-4 pr-16 text-[#1D1D1F] dark:text-[#F5F5F7] placeholder:text-slate-400 dark:placeholder:text-slate-600 focus:outline-none focus:border-[#C5A059] dark:focus:border-arcx-gold transition-colors font-mono text-lg" 
+                           type="number" name="amount_arcx" value={form.amount_arcx} onChange={handleChange} placeholder="5.00" min="0.000001" step="0.000001" required />
+                    <span className="absolute right-4 top-1/2 -translate-y-1/2 text-slate-500 font-bold text-xs uppercase transition-colors">ARCX</span>
+                  </div>
+                </div>
+                <button type="submit" className="w-full py-3.5 bg-[#C5A059] dark:bg-arcx-gold text-white dark:text-black font-bold rounded-xl hover:bg-[#B38F48] dark:hover:bg-[#E5C009] transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2" disabled={loading}>
+                  {loading ? <Loader2 size={18} className="animate-spin" /> : <><Send size={16} /> Send ARCX</>}
+                </button>
+              </form>
+            )}
+
           </div>
-
-          {txLoad ? (
-            <div className="flex items-center justify-center py-16 text-slate-400 text-sm gap-2">
-              <Loader2 size={16} className="animate-spin" />
-              Loading…
-            </div>
-          ) : txns.length === 0 ? (
-            <div className="flex flex-col items-center justify-center py-16 text-slate-400">
-              <ArrowLeftRight size={28} className="mb-3 opacity-30" />
-              <p className="text-sm">No transactions yet.</p>
-              <p className="text-xs mt-1">Make your first deposit to get started.</p>
-            </div>
-          ) : (
-            <div className="divide-y divide-slate-50">
-              {txns.map(tx => <TxRow key={tx.id} tx={tx} />)}
-            </div>
-          )}
         </div>
+
+        {/* ── Right: Transaction History ─────────────────────────────── */}
+        <div className="lg:col-span-3">
+          <div className="bg-white dark:bg-[#1C1C1E] border border-black/5 dark:border-white/5 rounded-[24px] overflow-hidden min-h-[500px] shadow-sm dark:shadow-none transition-colors duration-300">
+            <div className="p-6 border-b border-black/5 dark:border-white/5 flex items-center justify-between bg-slate-50 dark:bg-black/20 transition-colors">
+              <h3 className="font-display font-bold text-lg text-[#1D1D1F] dark:text-[#F5F5F7] transition-colors">Recent Transactions</h3>
+              <div className="flex items-center gap-1.5 text-xs font-bold text-slate-500 uppercase tracking-widest transition-colors">
+                <Clock size={14} /> Last 30 Days
+              </div>
+            </div>
+
+            {txLoad ? (
+              <div className="flex items-center justify-center py-20 text-slate-500 text-sm gap-2">
+                <Loader2 size={16} className="animate-spin" /> Loading ledger…
+              </div>
+            ) : txns.length === 0 ? (
+              <div className="flex flex-col items-center justify-center py-24 text-slate-500 transition-colors">
+                <ArrowLeftRight size={32} className="mb-4 opacity-50" />
+                <p className="text-sm font-medium text-[#1D1D1F] dark:text-[#F5F5F7] mb-1 transition-colors">No transactions yet</p>
+                <p className="text-xs">Make your first deposit to get started.</p>
+              </div>
+            ) : (
+              <div className="divide-y divide-black/5 dark:divide-white/5 transition-colors">
+                {txns.map(tx => <TxRow key={tx.id} tx={tx} />)}
+              </div>
+            )}
+          </div>
+        </div>
+
       </div>
     </div>
   )

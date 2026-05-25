@@ -5,7 +5,7 @@
 @layer base {
   * { box-sizing: border-box; }
   body {
-    @apply bg-vault text-text-primary antialiased selection:bg-arcx-gold/20 selection:text-arcx-gold;
+    @apply bg-[#F5F5F7] dark:bg-[#000000] text-[#1D1D1F] dark:text-[#F5F5F7] antialiased selection:bg-[#C5A059]/20 selection:text-[#C5A059] transition-colors duration-300;
     font-family: 'Inter', sans-serif;
   }
   h1, h2, h3, .font-display { 

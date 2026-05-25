@@ -1,0 +1,128 @@
+version: '3.8'
+
+services:
+  # ── PostgreSQL Database ─────────────────────────────────────────────────────
+  db:
+    image: postgres:15-alpine
+    container_name: arcx_db
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ${DB_NAME:-arcx_db}
+      POSTGRES_USER: ${DB_USER:-arcx_user}
+      POSTGRES_PASSWORD: ${DB_PASSWORD:-arcx_password}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    ports:
+      - "5432:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${DB_USER:-arcx_user} -d ${DB_NAME:-arcx_db}"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  # ── Redis Broker & Cache ────────────────────────────────────────────────────
+  redis:
+    image: redis:7-alpine
+    container_name: arcx_redis
+    restart: unless-stopped
+    ports:
+      - "6379:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  # ── Django API Server ───────────────────────────────────────────────────────
+  backend:
+    build:
+      context: .
+      dockerfile: arcx_backend/Dockerfile
+    container_name: arcx_backend
+    restart: unless-stopped
+    command: python manage.py runserver 0.0.0.0:8000
+    volumes:
+      - ./arcx_backend:/app/arcx_backend
+    ports:
+      - "8000:8000"
+    environment:
+      - DB_HOST=db
+      - DB_NAME=${DB_NAME:-arcx_db}
+      - DB_USER=${DB_USER:-arcx_user}
+      - DB_PASSWORD=${DB_PASSWORD:-arcx_password}
+      - REDIS_URL=redis://redis:6379/0
+      - DJANGO_SECRET_KEY=${DJANGO_SECRET_KEY:-django-insecure-local-dev-key}
+      - DEBUG=True
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+
+  # ── Celery Worker ───────────────────────────────────────────────────────────
+  worker:
+    build:
+      context: .
+      dockerfile: arcx_backend/Dockerfile
+    container_name: arcx_worker
+    restart: unless-stopped
+    command: celery -A arcx_backend worker -l INFO
+    volumes:
+      - ./arcx_backend:/app/arcx_backend
+    environment:
+      - DB_HOST=db
+      - DB_NAME=${DB_NAME:-arcx_db}
+      - DB_USER=${DB_USER:-arcx_user}
+      - DB_PASSWORD=${DB_PASSWORD:-arcx_password}
+      - REDIS_URL=redis://redis:6379/0
+      - DJANGO_SECRET_KEY=${DJANGO_SECRET_KEY:-django-insecure-local-dev-key}
+      - DEBUG=True
+    depends_on:
+      redis:
+        condition: service_healthy
+      db:
+        condition: service_healthy
+
+  # ── Celery Beat (Scheduler) ─────────────────────────────────────────────────
+  beat:
+    build:
+      context: .
+      dockerfile: arcx_backend/Dockerfile
+    container_name: arcx_beat
+    restart: unless-stopped
+    command: celery -A arcx_backend beat -l INFO
+    volumes:
+      - ./arcx_backend:/app/arcx_backend
+    environment:
+      - DB_HOST=db
+      - DB_NAME=${DB_NAME:-arcx_db}
+      - DB_USER=${DB_USER:-arcx_user}
+      - DB_PASSWORD=${DB_PASSWORD:-arcx_password}
+      - REDIS_URL=redis://redis:6379/0
+      - DJANGO_SECRET_KEY=${DJANGO_SECRET_KEY:-django-insecure-local-dev-key}
+      - DEBUG=True
+    depends_on:
+      redis:
+        condition: service_healthy
+      db:
+        condition: service_healthy
+
+  # ── React Frontend (Vite) ───────────────────────────────────────────────────
+  frontend:
+    build:
+      context: ./arcx-frontend
+      dockerfile: Dockerfile
+    container_name: arcx_frontend
+    restart: unless-stopped
+    volumes:
+      - ./arcx-frontend:/app
+      - /app/node_modules # Prevent host node_modules from overwriting container's
+    ports:
+      - "3000:3000"
+    environment:
+      - VITE_API_BASE_URL=http://localhost:8000
+    depends_on:
+      - backend
+
+volumes:
+  postgres_data:

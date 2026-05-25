@@ -228,6 +228,10 @@ class WalletService:
         state = engine.calculate_nav(prices)
         return Decimal(str(round(state.nav_inr, 4)))
 
+    def _fetch_prices(self):
+        """Fetch current prices from the Oracle."""
+        return self._oracle.fetch_prices()
+
     def _check_daily_limit(self, wallet: Wallet, amount_inr: Decimal, direction: str):
         from django.utils import timezone
         from datetime import timedelta

@@ -21,7 +21,7 @@ BASE_DIR = Path(__file__).resolve().parent.parent
 load_dotenv(BASE_DIR / '.env')
 
 # ... the rest of your settings.py stays the same ...
-SECRET_KEY = os.getenv("DJANGO_SECRET_KEY", "django-insecure-lr&(eza=fwaz=szk_$@5ei944vbzcz3s@%8a!65$d80$458$=+")
+SECRET_KEY = os.environ["DJANGO_SECRET_KEY"]
 
 
 # SECURITY WARNING: don't run with debug turned on in production!
@@ -140,9 +140,7 @@ SIMPLE_JWT = {
     "AUTH_HEADER_TYPES": ("Bearer",),
 }
  
-DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
-USE_TZ = True
-TIME_ZONE = "UTC"
+# Duplicates removed below
  
 
 # Password validation

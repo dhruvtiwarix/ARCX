@@ -186,11 +186,12 @@ def accrue_daily_dividends(self):
     # Add the yield to the vault
     # We update the snapshot's total_value_usd so tomorrow's NAV reflects it
     with transaction.atomic():
+        ratio = accrual.total_yield_usd / float(snapshot.total_value_usd)
+        snapshot.stock_value_usd += snapshot.stock_value_usd * Decimal(str(ratio))
+        snapshot.bond_value_usd  += snapshot.bond_value_usd * Decimal(str(ratio))
+        snapshot.gold_value_usd  += snapshot.gold_value_usd * Decimal(str(ratio))
+        snapshot.cash_value_usd  += snapshot.cash_value_usd * Decimal(str(ratio))
         snapshot.total_value_usd += Decimal(str(accrual.total_yield_usd))
-        snapshot.stock_value_usd  = snapshot.total_value_usd * Decimal("0.40")
-        snapshot.bond_value_usd   = snapshot.total_value_usd * Decimal("0.30")
-        snapshot.gold_value_usd   = snapshot.total_value_usd * Decimal("0.20")
-        snapshot.cash_value_usd   = snapshot.total_value_usd * Decimal("0.10")
         snapshot.save(update_fields=[
             "total_value_usd", "stock_value_usd",
             "bond_value_usd",  "gold_value_usd", "cash_value_usd",

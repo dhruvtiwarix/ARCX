@@ -8,10 +8,11 @@
 
 import { create } from 'zustand'
 import { authApi } from '../api/index'
+import { getAccessToken, setTokens, clearTokens } from '../utils/auth'
 
 export const useAuthStore = create((set, get) => ({
   user:          null,
-  isAuthenticated: !!localStorage.getItem('access_token'),
+  isAuthenticated: !!getAccessToken(),
   loading:       false,
   error:         null,
 
@@ -22,8 +23,7 @@ export const useAuthStore = create((set, get) => ({
     try {
       const data = await authApi.register(formData)
       const { access_token, refresh_token, ...user } = data
-      localStorage.setItem('access_token',  access_token)
-      localStorage.setItem('refresh_token', refresh_token)
+      setTokens(access_token, refresh_token)
       set({ user, isAuthenticated: true, loading: false })
       return { success: true }
     } catch (err) {
@@ -51,6 +51,7 @@ export const useAuthStore = create((set, get) => ({
     try {
       authApi.logout()
     } catch (_) { }
+    clearTokens()
     set({ user: null, isAuthenticated: false, error: null })
   },
 
