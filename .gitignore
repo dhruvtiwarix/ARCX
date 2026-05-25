@@ -15,3 +15,7 @@ reports/
 
 # ARCX Logs
 logs/
+
+# Ignored project files
+flutter-design/
+arcx-frontend/layout.txt
