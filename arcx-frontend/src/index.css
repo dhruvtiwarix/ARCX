@@ -64,6 +64,15 @@
   .badge-red    { @apply badge bg-arcx-red/10 text-arcx-red border-arcx-red/20; }
   .badge-blue   { @apply badge bg-[#0A84FF]/10 text-[#0A84FF] border-[#0A84FF]/20; }
   .badge-gray   { @apply badge bg-white/5 text-text-secondary border-white/10; }
+
+  /* iOS Flutter Glass Effects */
+  .glass-container {
+    @apply bg-white/[0.06] backdrop-blur-[20px] rounded-[24px] border border-white/[0.12] shadow-[inset_0_0_1px_rgba(255,255,255,0.03)];
+  }
+  
+  .hero-glass-card {
+    @apply bg-gradient-to-br from-[#2C2C2E] to-[#1C1C1E] rounded-[20px] border border-white/[0.1] shadow-[0_10px_20px_rgba(0,0,0,0.3)];
+  }
 }
 
 /* Custom scrollbar */

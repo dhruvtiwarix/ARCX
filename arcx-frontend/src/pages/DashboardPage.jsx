@@ -1,9 +1,9 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useState, useRef } from 'react'
 import {
-  LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer,
-  PieChart, Pie, Cell
+  AreaChart, Area, XAxis, YAxis, Tooltip, ResponsiveContainer,
+  PieChart, Pie, Cell, ReferenceLine
 } from 'recharts'
-import { TrendingUp, TrendingDown, RefreshCw, AlertTriangle, ArrowUpRight, Send, ArrowDownLeft, Clock, ArrowLeftRight } from 'lucide-react'
+import { TrendingUp, TrendingDown, RefreshCw, AlertTriangle, ArrowUpRight, Send, ArrowDownLeft, ArrowLeftRight } from 'lucide-react'
 import { oracleApi, walletApi } from '../api/index'
 import { useAuthStore } from '../store/authStore'
 import { format } from 'date-fns'
@@ -64,18 +64,21 @@ function TxRow({ tx }) {
 
 function NavTooltip({ active, payload, label }) {
   if (!active || !payload?.length) return null
-  const nav = payload[0]?.value
+  const nav   = Number(payload[0]?.value)
+  const first = Number(payload[0]?.payload?.open ?? nav)
+  const delta = nav - first
+  const isUp  = delta >= 0
   return (
-    <div className="bg-white/95 dark:bg-[#1C1C1E]/95 backdrop-blur-xl border border-black/10 dark:border-white/10 rounded-xl shadow-2xl px-4 py-3 text-sm transition-colors">
-      <p className="text-slate-500 dark:text-slate-400 font-medium mb-1 text-[11px] uppercase tracking-widest">{label}</p>
-      <p className="font-semibold text-[#1D1D1F] dark:text-[#F5F5F7] text-base">₹{Number(nav).toFixed(4)}</p>
+    <div className="bg-white dark:bg-[#1C1C1E] border border-black/8 dark:border-white/10 rounded-2xl shadow-2xl px-4 py-3 min-w-[140px] transition-colors">
+      <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-1">{label}</p>
+      <p className="font-bold text-[#1D1D1F] dark:text-[#F5F5F7] text-[17px] leading-none">&#8377;{nav.toFixed(4)}</p>
     </div>
   )
 }
 
 function BentoCard({ children, className = "" }) {
   return (
-    <div className={`bg-white dark:bg-[#1C1C1E] border border-black/5 dark:border-white/5 rounded-[24px] p-6 shadow-sm dark:shadow-none transition-colors duration-300 ${className}`}>
+    <div className={`bg-white dark:glass-container border border-black/5 dark:border-0 rounded-[24px] p-6 shadow-sm dark:shadow-none transition-colors duration-300 ${className}`}>
       {children}
     </div>
   )
@@ -87,6 +90,7 @@ export default function DashboardPage() {
   const [livePrice,  setLivePrice]  = useState(null)
   const [recentTxns, setRecentTxns] = useState([])
   const [loading,    setLoading]    = useState(true)
+  const [activeRange, setActiveRange] = useState('1M')
 
   const balance = Number(user?.arcx_balance || 0)
   const costBasis = Number(user?.cost_basis_inr || 0)
@@ -118,14 +122,19 @@ export default function DashboardPage() {
     return () => clearInterval(id)
   }, [])
 
+  // Slice the 30-day history based on the selected range
+  const RANGE_DAYS = { '1D': 1, '1W': 7, '1M': 30, '1Y': 30 }
+  const chartData = navHistory.slice(-Math.min(RANGE_DAYS[activeRange], navHistory.length))
+
   const navInr       = Number(livePrice?.nav_inr  || 0)
   const currentValue = balance * navInr
   const pnl          = currentValue - costBasis
   const pnlPct       = costBasis > 0 ? (pnl / costBasis) * 100 : 0
 
-  const navTrend = navHistory.length >= 2
-    ? Number(navHistory.at(-1)?.nav) - Number(navHistory[0]?.nav)
+  const navTrend = chartData.length >= 2
+    ? Number(chartData.at(-1)?.nav) - Number(chartData[0]?.nav)
     : 0
+  const trendLabel = { '1D': '1D', '1W': '1W', '1M': '30D', '1Y': '30D' }[activeRange]
 
   return (
     <div className="animate-fade-in transition-colors duration-300">
@@ -147,11 +156,11 @@ export default function DashboardPage() {
       )}
 
       {/* Hero Section */}
-      <div className="mb-10">
-        <h2 className="text-[11px] font-bold text-slate-500 dark:text-slate-500 uppercase tracking-widest mb-2 transition-colors">Total Portfolio Value</h2>
+      <div className="mb-10 dark:hero-glass-card p-6 -mx-6 sm:mx-0 sm:p-8">
+        <h2 className="text-[11px] font-bold text-slate-500 dark:text-slate-400 uppercase tracking-widest mb-2 transition-colors">Total Portfolio Value</h2>
         <div className="flex items-end gap-4">
           <h1 className="font-display font-light text-[56px] leading-none text-[#1D1D1F] dark:text-[#F5F5F7] tracking-tight transition-colors">
-            ₹{currentValue.toLocaleString('en-IN', { maximumFractionDigits: 2, minimumFractionDigits: 2 })}
+            &#8377;{currentValue.toLocaleString('en-IN', { maximumFractionDigits: 2, minimumFractionDigits: 2 })}
           </h1>
           <div className={`flex items-center gap-1 mb-2 px-2.5 py-1 rounded-full text-xs font-bold transition-colors ${pnl >= 0 ? 'bg-emerald-100 dark:bg-emerald-500/15 text-emerald-700 dark:text-emerald-400' : 'bg-red-100 dark:bg-red-500/15 text-red-700 dark:text-red-400'}`}>
             {pnl >= 0 ? <TrendingUp size={14} /> : <TrendingDown size={14} />}
@@ -159,50 +168,123 @@ export default function DashboardPage() {
           </div>
         </div>
         <p className="text-sm text-slate-500 dark:text-slate-400 mt-3 transition-colors">
-          {balance.toLocaleString('en-US', { maximumFractionDigits: 4 })} ARCX • Cost Basis: ₹{costBasis.toLocaleString('en-IN')}
+          {balance.toLocaleString('en-US', { maximumFractionDigits: 4 })} ARCX &bull; Cost Basis: &#8377;{costBasis.toLocaleString('en-IN')}
         </p>
       </div>
 
       {/* Bento Box Grid */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-10">
 
-        {/* Span-2 Chart */}
-        <BentoCard className="lg:col-span-2 relative min-h-[360px] flex flex-col">
-          <div className="flex items-start justify-between mb-8">
+        {/* Span-2 Chart Card — Google Finance style */}
+        <BentoCard className="lg:col-span-2">
+
+          {/* Chart Header */}
+          <div className="flex items-start justify-between mb-5">
             <div>
-              <h2 className="text-[11px] font-bold text-slate-500 uppercase tracking-widest mb-1 transition-colors">ARCX NAV Price</h2>
-              <div className="flex items-center gap-3">
-                <span className="text-2xl font-display font-bold text-[#1D1D1F] dark:text-[#F5F5F7] transition-colors">₹{navInr.toFixed(4)}</span>
-                <span className={`text-xs font-bold transition-colors ${navTrend >= 0 ? 'text-emerald-600 dark:text-emerald-400' : 'text-red-600 dark:text-red-400'}`}>
-                  {navTrend >= 0 ? '+' : ''}{navTrend.toFixed(4)} (30D)
+              <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-1">ARCX NAV Price</p>
+              <div className="flex items-baseline gap-3">
+                <span className="text-[28px] font-bold text-[#1D1D1F] dark:text-[#F5F5F7] leading-none tracking-tight transition-colors">
+                  &#8377;{navInr.toFixed(4)}
+                </span>
+                <span className={`text-xs font-bold px-2 py-0.5 rounded-full transition-colors ${
+                  navTrend >= 0
+                    ? 'bg-emerald-100 dark:bg-emerald-500/15 text-emerald-700 dark:text-emerald-400'
+                    : 'bg-red-100 dark:bg-red-500/15 text-red-700 dark:text-red-400'
+                }`}>
+                  {navTrend >= 0 ? '+' : ''}{navTrend.toFixed(4)} ({trendLabel})
                 </span>
               </div>
             </div>
-            <div className="flex bg-slate-100 dark:bg-white/5 rounded-lg p-1 border border-black/5 dark:border-white/5 transition-colors">
+
+            {/* Time range pill switcher */}
+            <div className="flex bg-slate-100 dark:bg-black/30 rounded-xl p-1 gap-0.5 border border-black/5 dark:border-white/5 transition-colors">
               {['1D', '1W', '1M', '1Y'].map(t => (
-                <button key={t} className={`px-3 py-1 text-[11px] font-bold rounded-md transition-colors ${t === '1M' ? 'bg-white dark:bg-white/10 text-[#1D1D1F] dark:text-[#F5F5F7] shadow-sm dark:shadow-none' : 'text-slate-500 hover:text-[#1D1D1F] dark:hover:text-slate-300'}`}>
+                <button
+                  key={t}
+                  onClick={() => setActiveRange(t)}
+                  className={`px-3 py-1.5 text-[11px] font-bold rounded-lg transition-all duration-150 ${
+                    t === activeRange
+                      ? 'bg-white dark:bg-white/10 text-[#1D1D1F] dark:text-[#F5F5F7] shadow-sm'
+                      : 'text-slate-400 hover:text-[#1D1D1F] dark:hover:text-[#F5F5F7]'
+                  }`}
+                >
                   {t}
                 </button>
               ))}
             </div>
           </div>
 
-          {loading ? (
-            <div className="flex-1 flex items-center justify-center text-slate-500 text-sm">Loading chart…</div>
-          ) : navHistory.length === 0 ? (
-            <div className="flex-1 flex items-center justify-center text-slate-500 text-sm">No NAV data yet.</div>
-          ) : (
-            <div className="flex-1 w-full min-h-[220px]">
-              <ResponsiveContainer width="100%" height="100%">
-                <LineChart data={navHistory} margin={{ top: 10, right: 0, left: 0, bottom: 0 }}>
-                  <XAxis dataKey="date" hide />
-                  <YAxis hide domain={['auto', 'auto']} />
-                  <Tooltip content={<NavTooltip />} cursor={{ stroke: 'rgba(128,128,128,0.2)', strokeWidth: 1 }} />
-                  <Line type="monotone" dataKey="nav" stroke="#C5A059" strokeWidth={2} dot={false} activeDot={{ r: 4, fill: '#C5A059', strokeWidth: 0 }} />
-                </LineChart>
-              </ResponsiveContainer>
-            </div>
-          )}
+          {/* Chart area — 240px fixed height */}
+          <div style={{ height: 240, marginLeft: -24, marginRight: -24 }}>
+            {loading ? (
+              <div className="h-full flex items-center justify-center gap-2 text-slate-400 text-sm">
+                <RefreshCw size={15} className="animate-spin" /> Loading...
+              </div>
+            ) : chartData.length === 0 ? (
+              <div className="h-full flex items-center justify-center text-slate-400 text-sm">No data yet.</div>
+            ) : (() => {
+              // Compute a padded domain so small fluctuations don't look like spikes
+              const vals    = chartData.map(d => Number(d.nav))
+              const dataMin = Math.min(...vals)
+              const dataMax = Math.max(...vals)
+              const pad     = (dataMax - dataMin) * 0.3 || 0.5   // 30% padding; fallback 0.5 if flat
+              const yMin    = dataMin - pad
+              const yMax    = dataMax + pad
+              const isUp    = navTrend >= 0
+              const lineColor = isUp ? '#10b981' : '#ef4444'
+
+              return (
+                <ResponsiveContainer width="100%" height="100%">
+                  <AreaChart data={chartData} margin={{ top: 8, right: 16, left: 0, bottom: 0 }}>
+                    <defs>
+                      <linearGradient id="navGrad" x1="0" y1="0" x2="0" y2="1">
+                        <stop offset="0%"   stopColor={lineColor} stopOpacity={0.15} />
+                        <stop offset="85%"  stopColor={lineColor} stopOpacity={0.02} />
+                        <stop offset="100%" stopColor={lineColor} stopOpacity={0} />
+                      </linearGradient>
+                    </defs>
+
+                    <XAxis
+                      dataKey="date"
+                      tick={{ fontSize: 11, fill: '#94a3b8', fontFamily: 'Inter, sans-serif' }}
+                      axisLine={false}
+                      tickLine={false}
+                      interval="preserveStartEnd"
+                      padding={{ left: 20, right: 20 }}
+                      dy={8}
+                    />
+                    <YAxis
+                      tick={{ fontSize: 11, fill: '#94a3b8', fontFamily: 'Inter, sans-serif' }}
+                      axisLine={false}
+                      tickLine={false}
+                      width={68}
+                      domain={[yMin, yMax]}
+                      tickCount={4}
+                      tickFormatter={v => `\u20B9${Number(v).toFixed(2)}`}
+                      orientation="right"
+                    />
+                    <Tooltip
+                      content={<NavTooltip />}
+                      cursor={{ stroke: '#94a3b8', strokeWidth: 1, strokeDasharray: '3 3' }}
+                      isAnimationActive={false}
+                    />
+                    <Area
+                      type="monotone"
+                      dataKey="nav"
+                      stroke={lineColor}
+                      strokeWidth={2.5}
+                      fill="url(#navGrad)"
+                      dot={false}
+                      activeDot={{ r: 5, fill: lineColor, strokeWidth: 2.5, stroke: '#fff' }}
+                      isAnimationActive={true}
+                      animationDuration={300}
+                      animationEasing="ease-out"
+                    />
+                  </AreaChart>
+                </ResponsiveContainer>
+              )
+            })()}
+          </div>
         </BentoCard>
 
         {/* Right Column Stack */}
@@ -269,7 +351,7 @@ export default function DashboardPage() {
           <h2 className="text-[11px] font-bold text-slate-500 uppercase tracking-widest transition-colors">Recent Activity</h2>
           <Link to="/wallet" className="text-[11px] font-bold text-arcx-gold hover:text-[#1D1D1F] dark:hover:text-white transition-colors uppercase tracking-widest">View All</Link>
         </div>
-        <div className="bg-white dark:bg-[#1C1C1E] border border-black/5 dark:border-white/5 rounded-[24px] overflow-hidden shadow-sm dark:shadow-none transition-colors duration-300">
+        <div className="bg-white dark:glass-container border border-black/5 dark:border-0 rounded-[24px] overflow-hidden shadow-sm dark:shadow-none transition-colors duration-300">
           
           {loading ? (
             <div className="flex items-center justify-center py-10 text-slate-500 text-sm gap-2">

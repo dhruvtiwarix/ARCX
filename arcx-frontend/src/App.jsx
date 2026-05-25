@@ -8,6 +8,7 @@ import DashboardPage   from './pages/DashboardPage'
 import WalletPage      from './pages/WalletPage'
 import KYCPage         from './pages/KYCPage'
 import ProfilePage     from './pages/ProfilePage'
+import PortfolioPage   from './pages/PortfolioPage'
 
 // ── Protected route wrapper ────────────────────────────────────────────────────
 function Protected({ children }) {
@@ -48,6 +49,7 @@ export default function App() {
           <Route index            element={<Navigate to="/dashboard" replace />} />
           <Route path="dashboard" element={<DashboardPage />} />
           <Route path="wallet"    element={<WalletPage />} />
+          <Route path="portfolio" element={<PortfolioPage />} />
           <Route path="kyc"       element={<KYCPage />} />
           <Route path="profile"   element={<ProfilePage />} />
         </Route>

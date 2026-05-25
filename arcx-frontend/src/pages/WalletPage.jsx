@@ -205,7 +205,7 @@ export default function WalletPage() {
         {/* ── Left: Action Panel ─────────────────────────────────────── */}
         <div className="lg:col-span-2">
           
-          <div className="bg-white dark:bg-[#1C1C1E] border border-black/5 dark:border-white/5 rounded-[24px] p-6 max-w-md mx-auto lg:mx-0 shadow-sm dark:shadow-2xl transition-colors duration-300">
+          <div className="bg-white dark:glass-container border border-black/5 dark:border-0 rounded-[24px] p-6 max-w-md mx-auto lg:mx-0 shadow-sm dark:shadow-none transition-colors duration-300">
             
             {/* Balance Card inside Action Panel */}
             <div className="bg-slate-100 dark:bg-gradient-to-br dark:from-[#2C2C2E] dark:to-[#1C1C1E] border border-black/5 dark:border-white/10 rounded-xl p-5 mb-8 shadow-inner relative overflow-hidden transition-colors duration-300">
@@ -302,8 +302,8 @@ export default function WalletPage() {
 
         {/* ── Right: Transaction History ─────────────────────────────── */}
         <div className="lg:col-span-3">
-          <div className="bg-white dark:bg-[#1C1C1E] border border-black/5 dark:border-white/5 rounded-[24px] overflow-hidden min-h-[500px] shadow-sm dark:shadow-none transition-colors duration-300">
-            <div className="p-6 border-b border-black/5 dark:border-white/5 flex items-center justify-between bg-slate-50 dark:bg-black/20 transition-colors">
+          <div className="bg-white dark:glass-container border border-black/5 dark:border-0 rounded-[24px] overflow-hidden min-h-[500px] shadow-sm dark:shadow-none transition-colors duration-300">
+            <div className="p-6 border-b border-black/5 dark:border-white/10 flex items-center justify-between bg-slate-50 dark:bg-black/20 transition-colors">
               <h3 className="font-display font-bold text-lg text-[#1D1D1F] dark:text-[#F5F5F7] transition-colors">Recent Transactions</h3>
               <div className="flex items-center gap-1.5 text-xs font-bold text-slate-500 uppercase tracking-widest transition-colors">
                 <Clock size={14} /> Last 30 Days
