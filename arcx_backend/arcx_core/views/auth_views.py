@@ -130,7 +130,9 @@ class MeView(APIView):
         arcx_user = service.get_arcx_user(user_id)
 
         serializer = UserProfileSerializer(arcx_user)
-        return Response(serializer.data)
+        data = serializer.data
+        data["is_staff"] = request.user.is_staff
+        return Response(data)
 
 
 class LogoutView(APIView):

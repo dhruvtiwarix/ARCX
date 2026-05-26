@@ -40,6 +40,9 @@ from arcx_core.views.wallet_views   import (
 from arcx_core.views.oracle_views   import LivePriceView, NAVHistoryView, TodayNAVView
 from arcx_core.views.transfer_views import TransferView
 from arcx_core.views.portfolio_views import PortfolioAnalyticsView
+from arcx_core.views.admin_views import (
+    AdminUserListView, AdminKYCView, AdminNAVComputerView
+)
 
 urlpatterns = [
     # ── Auth ─────────────────────────────────────────────────────────────
@@ -67,4 +70,9 @@ urlpatterns = [
 
     # ── Portfolio ─────────────────────────────────────────────────────
     path("portfolio/analytics", PortfolioAnalyticsView.as_view(), name="portfolio_analytics"),
+
+    # ── Admin ─────────────────────────────────────────────────────────────
+    path("admin/users",       AdminUserListView.as_view(),      name="admin_users"),
+    path("admin/kyc",         AdminKYCView.as_view(),           name="admin_kyc"),
+    path("admin/nav/compute", AdminNAVComputerView.as_view(),   name="admin_nav_compute"),
 ]

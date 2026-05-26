@@ -9,6 +9,8 @@ import WalletPage      from './pages/WalletPage'
 import KYCPage         from './pages/KYCPage'
 import ProfilePage     from './pages/ProfilePage'
 import PortfolioPage   from './pages/PortfolioPage'
+import AdminPage       from './pages/AdminPage'
+import AdminRoute      from './components/layout/AdminRoute'
 
 // ── Protected route wrapper ────────────────────────────────────────────────────
 function Protected({ children }) {
@@ -52,6 +54,10 @@ export default function App() {
           <Route path="portfolio" element={<PortfolioPage />} />
           <Route path="kyc"       element={<KYCPage />} />
           <Route path="profile"   element={<ProfilePage />} />
+          {/* Admin Operations (Hidden Route) */}
+          <Route element={<AdminRoute />}>
+            <Route path="admin-ops" element={<AdminPage />} />
+          </Route>
         </Route>
 
         {/* Catch-all */}

@@ -229,16 +229,7 @@ class Command(BaseCommand):
 
         result = []
         for u in TEST_USERS:
-            # Create Django auth user (for login)
-            django_user, created = DjangoUser.objects.get_or_create(
-                username=u["email"],
-                defaults={"email": u["email"], "first_name": u["name"].split()[0]},
-            )
-            if created:
-                django_user.set_password(u["password"])
-                django_user.save()
-
-            # Create ARCX domain user
+            # Create ARCX domain user FIRST
             arcx_user, _ = User.objects.get_or_create(
                 email=u["email"],
                 defaults={
@@ -251,6 +242,15 @@ class Command(BaseCommand):
             if arcx_user.kyc_status != User.KycStatus.APPROVED:
                 arcx_user.kyc_status = User.KycStatus.APPROVED
                 arcx_user.save(update_fields=["kyc_status", "updated_at"])
+
+            # Create Django auth user (for login) with username = arcx_user.id
+            django_user, created = DjangoUser.objects.get_or_create(
+                username=str(arcx_user.id),
+                defaults={"email": u["email"], "first_name": u["name"].split()[0]},
+            )
+            if created:
+                django_user.set_password(u["password"])
+                django_user.save()
 
             # Create KYC record if missing
             if not KYCRecord.objects.filter(user=arcx_user, status=KYCRecord.Status.APPROVED).exists():
