@@ -120,7 +120,7 @@ export default function AdminPage() {
 
       {/* ── Users Tab ──────────────────────────────────────────────────────── */}
       {tab === 'users' && (
-        <div className="bg-white dark:glass-container border border-black/5 dark:border-0 rounded-[24px] overflow-hidden shadow-sm dark:shadow-none transition-colors duration-300">
+        <div className="glassContainer border border-black/5 dark:border-white/5 rounded-[24px] overflow-hidden shadow-sm dark:shadow-none transition-colors duration-300">
           <div className="p-6 border-b border-black/5 dark:border-white/10 bg-slate-50 dark:bg-black/20 flex items-center justify-between">
             <h3 className="font-display font-bold text-lg text-[#1D1D1F] dark:text-[#F5F5F7]">Platform Users</h3>
             <span className="text-xs font-bold text-slate-500 uppercase tracking-widest">{users.length} Total</span>
@@ -168,7 +168,7 @@ export default function AdminPage() {
 
       {/* ── KYC Tab ────────────────────────────────────────────────────────── */}
       {tab === 'kyc' && (
-        <div className="bg-white dark:glass-container border border-black/5 dark:border-0 rounded-[24px] p-6 shadow-sm dark:shadow-none transition-colors duration-300">
+        <div className="glassContainer border border-black/5 dark:border-white/5 rounded-[24px] p-6 shadow-sm dark:shadow-none transition-colors duration-300">
           <h3 className="font-display font-bold text-lg text-[#1D1D1F] dark:text-[#F5F5F7] mb-6">Pending KYC Approvals</h3>
           
           {loading ? (
@@ -211,7 +211,7 @@ export default function AdminPage() {
       {/* ── System Tab ─────────────────────────────────────────────────────── */}
       {tab === 'system' && (
         <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-          <div className="bg-white dark:glass-container border border-black/5 dark:border-0 rounded-[24px] p-6 shadow-sm dark:shadow-none transition-colors duration-300">
+          <div className="glassContainer border border-black/5 dark:border-white/5 rounded-[24px] p-6 shadow-sm dark:shadow-none transition-colors duration-300">
             <div className="w-12 h-12 bg-indigo-100 dark:bg-indigo-500/10 text-indigo-600 dark:text-indigo-400 rounded-full flex items-center justify-center mb-4">
               <Calculator size={24} />
             </div>

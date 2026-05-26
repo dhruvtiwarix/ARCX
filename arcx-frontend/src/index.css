@@ -4,82 +4,278 @@
 
 @layer base {
   * { box-sizing: border-box; }
-  body {
-    @apply bg-[#F5F5F7] dark:bg-[#000000] text-[#1D1D1F] dark:text-[#F5F5F7] antialiased selection:bg-[#C5A059]/20 selection:text-[#C5A059] transition-colors duration-300;
-    font-family: 'Inter', sans-serif;
+  
+  :root {
+    --bg-gradient-1: #ebf2fa;
+    --bg-gradient-2: #f7f8fa;
+    --bg-gradient-3: #dbe4f0;
+    
+    --glass-bg: rgba(255, 255, 255, 0.4);
+    --glass-border: rgba(255, 255, 255, 0.6);
+    --glass-shadow: inset 2px 2px 0px -2px rgba(255, 255, 255, 0.7), inset 0 0 3px 1px rgba(255, 255, 255, 0.7);
+    --glass-blur: blur(20px);
+    
+    --text-primary: #1D1D1F;
+    --text-secondary: #6B7280;
   }
+
+  .dark {
+    --bg-gradient-1: #000000;
+    --bg-gradient-2: #000000;
+    --bg-gradient-3: #000000;
+
+    --glass-bg: rgba(28, 28, 30, 0.65); /* #1C1C1E with transparency */
+    --glass-border: rgba(255, 255, 255, 0.08);
+    --glass-shadow: inset 1px 1px 0px 0px rgba(255, 255, 255, 0.05), inset 0 0 2px 0px rgba(255, 255, 255, 0.05);
+    --glass-blur: blur(25px);
+
+    --text-primary: #F5F5F7;
+    --text-secondary: #9CA3AF;
+  }
+
+  body {
+    @apply text-[var(--text-primary)] antialiased transition-colors duration-500;
+    font-family: 'Inter', sans-serif;
+    font-weight: 400;
+    margin: 0;
+    padding: 0;
+    min-height: 100vh;
+    
+    background: linear-gradient(-45deg, var(--bg-gradient-1), var(--bg-gradient-2), var(--bg-gradient-3));
+    background-size: 400% 400%;
+    animation: moveBackground 15s ease infinite;
+  }
+
   h1, h2, h3, .font-display { 
-    font-family: 'Playfair Display', serif; 
+    font-family: 'Inter', sans-serif; 
+    letter-spacing: -0.02em;
   }
   .font-mono {
     font-family: 'DM Mono', monospace;
   }
 }
 
+@keyframes moveBackground {
+  0% { background-position: 0% 50%; }
+  50% { background-position: 100% 50%; }
+  100% { background-position: 0% 50%; }
+}
+
 @layer components {
-  /* Layout classes */
-  .layout-grid {
-    @apply grid lg:grid-cols-[240px_1fr] min-h-screen bg-vault;
-  }
-  
-  .sidebar {
-    @apply bg-vault border-r border-vault-border flex flex-col;
-  }
 
   /* Utility components */
   .btn {
     @apply inline-flex items-center justify-center gap-2 rounded-2xl px-5 py-3
            font-medium text-[15px] transition-all duration-300 disabled:opacity-50
-           disabled:cursor-not-allowed focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-offset-vault;
+           disabled:cursor-not-allowed focus:outline-none focus:ring-2 focus:ring-offset-2;
   }
   .btn-primary {
-    @apply btn bg-arcx-gold text-vault font-semibold hover:brightness-110 focus:ring-arcx-gold/50
-           active:scale-[.97] shadow-[0_0_15px_rgba(225,195,137,0.3)];
+    @apply btn bg-black dark:bg-white text-white dark:text-black font-semibold hover:opacity-90;
   }
   .btn-ghost {
-    @apply btn bg-transparent text-text-secondary hover:bg-white/5 hover:text-text-primary active:scale-[.97];
+    @apply btn bg-transparent hover:bg-black/5 dark:hover:bg-white/10 active:scale-[.97];
   }
   .btn-danger {
-    @apply btn bg-arcx-red/10 text-arcx-red hover:bg-arcx-red/20 focus:ring-arcx-red/50 active:scale-[.97];
+    @apply btn bg-red-100 text-red-600 dark:bg-red-900/30 dark:text-red-400 hover:bg-red-200 dark:hover:bg-red-900/50;
   }
   .input {
-    @apply w-full rounded-2xl border border-vault-border bg-vault-card/50 px-4 py-3 text-[15px]
-           text-text-primary placeholder:text-text-secondary/60 focus:border-arcx-gold/50 focus:ring-4
-           focus:ring-arcx-gold/10 focus:outline-none transition-all duration-300 focus:bg-vault-card backdrop-blur-md;
-  }
-  .card {
-    @apply bg-[#111111]/80 backdrop-blur-2xl rounded-[28px] border border-vault-border shadow-2xl shadow-black/80;
+    @apply w-full rounded-2xl border border-black/10 dark:border-white/10 bg-white/50 dark:bg-black/30 px-4 py-3 text-[15px]
+           focus:border-blue-500 focus:ring-4 focus:ring-blue-500/10 focus:outline-none transition-all duration-300 backdrop-blur-md;
   }
   .stat-label {
-    @apply text-[13px] font-medium text-text-secondary tracking-wide;
+    @apply text-[13px] font-medium text-slate-500 dark:text-slate-400 tracking-wide;
   }
   .stat-value {
-    @apply text-3xl font-display font-semibold text-text-primary tracking-tight;
+    @apply text-3xl font-display font-semibold tracking-tight;
   }
   .badge {
     @apply inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-[11px] font-semibold uppercase tracking-wider border;
   }
-  .badge-green  { @apply badge bg-arcx-green/10 text-arcx-green border-arcx-green/20; }
-  .badge-yellow { @apply badge bg-arcx-gold/10 text-arcx-gold border-arcx-gold/20; }
-  .badge-red    { @apply badge bg-arcx-red/10 text-arcx-red border-arcx-red/20; }
-  .badge-blue   { @apply badge bg-[#0A84FF]/10 text-[#0A84FF] border-[#0A84FF]/20; }
-  .badge-gray   { @apply badge bg-white/5 text-text-secondary border-white/10; }
+  .badge-green  { @apply badge bg-emerald-100 dark:bg-emerald-900/30 text-emerald-700 dark:text-emerald-400 border-emerald-200 dark:border-emerald-800; }
+  .badge-yellow { @apply badge bg-amber-100 dark:bg-amber-900/30 text-amber-700 dark:text-amber-400 border-amber-200 dark:border-amber-800; }
+  .badge-red    { @apply badge bg-red-100 dark:bg-red-900/30 text-red-700 dark:text-red-400 border-red-200 dark:border-red-800; }
+  .badge-blue   { @apply badge bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-400 border-blue-200 dark:border-blue-800; }
 
-  /* iOS Flutter Glass Effects */
-  .glass-container {
-    @apply bg-white/[0.06] backdrop-blur-[20px] rounded-[24px] border border-white/[0.12] shadow-[inset_0_0_1px_rgba(255,255,255,0.03)];
+  /* Liquid Glass Container */
+  .glassContainer {
+    @apply relative flex flex-col rounded-[24px] z-10 transition-all duration-300;
+    background: var(--glass-bg);
+    border: 1px solid var(--glass-border);
+    backdrop-filter: var(--glass-blur);
+    -webkit-backdrop-filter: var(--glass-blur);
+    box-shadow: var(--glass-shadow), 0 8px 32px 0 rgba(0, 0, 0, 0.05);
+  }
+
+  /* Liquid Glass Button (Icon Button) */
+  .glassBtn {
+    @apply relative flex items-center justify-center cursor-pointer rounded-full outline-none border-none z-10 p-3 transition-transform duration-200 active:scale-95;
+    background: transparent;
+  }
+  .glassBtn::before {
+    content: '';
+    position: absolute;
+    inset: 0;
+    z-index: -1;
+    border-radius: 9999px;
+    box-shadow: var(--glass-shadow);
+    background-color: var(--glass-bg);
+  }
+  .glassBtn::after {
+    content: '';
+    position: absolute;
+    z-index: -2;
+    inset: 0;
+    border-radius: 9999px;
+    backdrop-filter: var(--glass-blur);
+    -webkit-backdrop-filter: var(--glass-blur);
+  }
+
+  /* Iridescent Glow Button (Primary CTA) */
+  button.iridescent {
+    font-size: 15px;
+    font-family: "Inter", sans-serif;
+    font-weight: 600;
+    color: #1d1d1f;
+    min-width: 8em;
+    height: 3em;
+    display: inline-flex;
+    justify-content: center;
+    align-items: center;
+    position: relative;
+    padding: 0.5em 1.5em;
+    outline: max(2px, calc(var(--brdr) * 0.75)) solid transparent;
+    outline-offset: max(2px, var(--brdr));
+    border-radius: 99vw;
+    transition: all 0.33s cubic-bezier(0.33, 1, 0.68, 1);
+    
+    --brdr: 2px;
+    border: max(2px, var(--brdr)) solid transparent;
+    
+    background: 
+        linear-gradient(to bottom, #ffffff, rgba(255,255,255,0.8) 33%, rgba(255,255,255,0.8)) padding-box,
+        linear-gradient(165deg, rgba(255,255,255,0.8) 25%, rgba(255,255,255,0.8)) border-box;
+    
+    --inset-shadow:
+        inset 0 0 0 0 rgba(255,255,255,0),
+        inset -4px -4px 4px -4px rgba(255,255,255,1),
+        inset -4px -16px 12px -12px rgba(255,255,255,1);
+    
+    --outer-shadow: 
+        rgba(0,0,0, 0.08) 0px 4px 6px 0px, 
+        rgba(0,0,0, 0.05) 0px 2px 4px 0px, 
+        rgba(0,0,0, 0.03) 0px 1px 2px 0px;
+    
+    box-shadow: var(--inset-shadow), var(--outer-shadow);
+    z-index: 10;
   }
   
-  .hero-glass-card {
-    @apply bg-gradient-to-br from-[#2C2C2E] to-[#1C1C1E] rounded-[20px] border border-white/[0.1] shadow-[0_10px_20px_rgba(0,0,0,0.3)];
+  .dark button.iridescent {
+    color: #ffffff;
+    background: 
+        linear-gradient(to bottom, #2a2a2f, rgba(42,42,47,0.8) 33%, rgba(42,42,47,0.8)) padding-box,
+        linear-gradient(165deg, rgba(255,255,255,0.2) 25%, rgba(255,255,255,0.1)) border-box;
+    --inset-shadow:
+        inset 0 0 0 0 rgba(0,0,0,0),
+        inset -4px -4px 4px -4px rgba(255,255,255,0.1),
+        inset -4px -16px 12px -12px rgba(255,255,255,0.05);
+    --outer-shadow: 
+        rgba(0,0,0, 0.5) 0px 4px 10px 0px, 
+        rgba(0,0,0, 0.3) 0px 2px 4px 0px;
+  }
+
+  button.iridescent::before,
+  button.iridescent::after {
+      content: "";
+      position: absolute;
+      inset: -2px;
+      border-radius: inherit;
+      pointer-events: none;
+      transition: all 0.6s cubic-bezier(0.32, 0, 0.67, 0);
+  }
+  
+  button.iridescent:hover,
+  button.iridescent.shine {
+      box-shadow: var(--inset-shadow), var(--outer-shadow);
+      transform: translateY(-1px);
+  }
+  
+  button.iridescent:hover::before,
+  button.iridescent:hover::after {
+      transition-duration: 0.3s;
+      transition-timing-function: cubic-bezier(0.33, 1, 0.68, 1);
+  }
+  
+  button.iridescent::after {
+      opacity: 0.3;
+      background: transparent;
+      box-shadow: 
+          inset 0 -4px 2px 1px rgba(255,255,255,1),
+          inset 0 -4px 4px rgba(255,255,255,1),
+          inset 0 -4px 8px rgba(255,255,255,1);
+      mix-blend-mode: lighten;
+      z-index: 12;
+  }
+  
+  .dark button.iridescent::after {
+      box-shadow: 
+          inset 0 -4px 2px 1px rgba(255,255,255,0.2),
+          inset 0 -4px 4px rgba(255,255,255,0.1);
+  }
+
+  button.iridescent::before {
+      opacity: 0;
+      transform: translate(16px, 0) scale(0.8);
+      background: linear-gradient(98deg, #ff9a9e -5%, #fecfef, #a1c4fd 160%);
+      mask: linear-gradient(166deg, transparent 60%, black);
+      -webkit-mask: linear-gradient(166deg, transparent 60%, black);
+      filter: blur(5px) brightness(1) contrast(1.3);
+      box-shadow: 
+          inset 0 -2px 0 2px rgba(255,255,255, 0.2),
+          inset 0 -4px 4px 2px rgba(255,255,255, 0.4);
+      z-index: 13;
+  }
+  
+  button.iridescent:hover::before {
+      opacity: 0.8;
+      transform: translate(0) scale(1);
+  }
+
+  button.iridescent:active {
+      transition: all 0.1s cubic-bezier(0.33, 1, 0.68, 1);
+      transform: translateY(1px);
+      border-color: rgba(255,255,255, 0.7);
   }
 }
 
 /* Custom scrollbar */
-::-webkit-scrollbar { width: 5px; }
+::-webkit-scrollbar { width: 5px; height: 5px; }
 ::-webkit-scrollbar-track { background: transparent; }
-::-webkit-scrollbar-thumb { background: #2C2C2E; border-radius: 9999px; }
-::-webkit-scrollbar-thumb:hover { background: #3C3C3E; }
-
-/* Recharts tooltip */
+::-webkit-scrollbar-thumb { background: rgba(0,0,0,0.1); border-radius: 9999px; }
+.dark ::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.1); }
+::-webkit-scrollbar-thumb:hover { background: rgba(0,0,0,0.2); }
+.dark ::-webkit-scrollbar-thumb:hover { background: rgba(255,255,255,0.2); }
 .recharts-tooltip-wrapper { outline: none !important; }
+
+/* Apple Stocks Chart Animations */
+.stock-chart-area .recharts-area-line {
+  stroke-dasharray: 5000;
+  stroke-dashoffset: 5000;
+  animation: drawChart 1.5s cubic-bezier(0.2, 0.8, 0.2, 1) forwards;
+}
+
+.stock-chart-area .recharts-area-area {
+  opacity: 0;
+  animation: fadeInArea 1.5s ease-out forwards 0.4s;
+}
+
+@keyframes drawChart {
+  to {
+    stroke-dashoffset: 0;
+  }
+}
+
+@keyframes fadeInArea {
+  to {
+    opacity: 1;
+  }
+}

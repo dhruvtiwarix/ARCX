@@ -31,25 +31,15 @@ class PortfolioAnalyticsView(APIView):
         """
         Resolve wallet robustly for all user types:
           - Real users:  username = UUID  → ArcxUser.id = UUID
-          - Seed users:  username = email → ArcxUser.email = email
+          - Seed users:  username = UUID  → ArcxUser.id = UUID
         Returns the wallet or raises Wallet.DoesNotExist.
         """
-        # Try UUID lookup first (normal path for real registered users)
         try:
             arcx_user = ArcxUser.objects.get(id=user_id, deleted_at__isnull=True)
             return Wallet.objects.select_related("user").get(
                 user=arcx_user, deleted_at__isnull=True
             )
-        except (ArcxUser.DoesNotExist, ValueError, Exception):
-            pass
-
-        # Fallback: username is an email (seed users created via management command)
-        try:
-            arcx_user = ArcxUser.objects.get(email=user_id, deleted_at__isnull=True)
-            return Wallet.objects.select_related("user").get(
-                user=arcx_user, deleted_at__isnull=True
-            )
-        except (ArcxUser.DoesNotExist, Wallet.DoesNotExist):
+        except (ArcxUser.DoesNotExist, Wallet.DoesNotExist, ValueError):
             raise Wallet.DoesNotExist(f"No wallet found for user_id={user_id!r}")
 
     def get(self, request):
@@ -70,23 +60,20 @@ class PortfolioAnalyticsView(APIView):
         # ── Live NAV ────────────────────────────────────────────────────────
         current_nav_inr = 0.0
         try:
-            oracle   = MultiSourceOracle()
-            prices   = oracle.fetch_prices()
             snapshot = VaultSnapshot.objects.latest("snapshot_date")
-            engine   = ValuationEngine(
-                arcx_supply     = float(snapshot.arcx_supply),
-                vault_value_usd = float(snapshot.total_value_usd),
-            )
-            state           = engine.calculate_nav(prices)
-            current_nav_inr = float(state.nav_inr)
-        except Exception as e:
-            logger.warning("Could not fetch live NAV for portfolio analytics: %s", e)
-            # Fall back to latest stored NAV
+            current_nav_inr = float(snapshot.total_value_usd) / float(snapshot.arcx_supply) * float(snapshot.usd_inr_rate)
+        except VaultSnapshot.DoesNotExist:
             try:
-                latest = NAVHistory.objects.latest("nav_date")
-                current_nav_inr = float(latest.nav_inr)
-            except NAVHistory.DoesNotExist:
+                oracle = MultiSourceOracle()
+                prices = oracle.fetch_prices()
+                engine = ValuationEngine.from_genesis(prices)
+                current_nav_inr = float(engine.calculate_nav(prices).nav_inr)
+            except Exception as e:
+                logger.warning("Could not fetch live NAV for portfolio analytics: %s", e)
                 current_nav_inr = 100.0
+        except Exception as e:
+            logger.warning("Error calculating NAV from snapshot: %s", e)
+            current_nav_inr = 100.0
 
         current_value    = arcx_balance * current_nav_inr
         unrealized_pnl   = current_value - cost_basis

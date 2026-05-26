@@ -87,9 +87,16 @@ function TxRow({ tx }) {
           {Number(tx.amount_inr) !== 0 && (
             <p className="text-xs text-slate-500 transition-colors">
               ₹{Number(tx.amount_inr).toLocaleString('en-IN', { maximumFractionDigits: 2 })}
+              {tx.tx_type === 'withdraw' && Number(tx.fee_inr) > 0 && (
+                <span className="text-amber-500 ml-1">(+₹{Number(tx.fee_inr).toFixed(2)} fee)</span>
+              )}
             </p>
           )}
-          <span className={`px-1.5 py-0.5 rounded text-[9px] uppercase tracking-wider font-bold transition-colors ${tx.status === 'completed' ? 'bg-emerald-100 dark:bg-emerald-500/20 text-emerald-700 dark:text-emerald-400' : 'bg-slate-200 dark:bg-slate-500/20 text-slate-600 dark:text-slate-400'}`}>
+          <span className={`px-1.5 py-0.5 rounded text-[9px] uppercase tracking-wider font-bold transition-colors ${
+            tx.status === 'completed'
+              ? 'bg-emerald-100 dark:bg-emerald-500/20 text-emerald-700 dark:text-emerald-400'
+              : 'bg-slate-200 dark:bg-slate-500/20 text-slate-600 dark:text-slate-400'
+          }`}>
             {tx.status}
           </span>
         </div>
@@ -156,7 +163,10 @@ export default function WalletPage() {
     setLoading(true)
     try {
       const d = await walletApi.withdraw(form.amount_arcx)
-      showFlash('ok', `Withdrawn! ₹${Number(d.inr_returned).toFixed(2)} credited · NAV ₹${Number(d.nav_at_tx).toFixed(4)}`)
+      const fee = Number(d.fee_inr || 0)
+      const net = Number(d.inr_returned)
+      const feeStr = fee > 0 ? ` · Fee ₹${fee.toLocaleString('en-IN', { maximumFractionDigits: 2 })}` : ''
+      showFlash('ok', `Instant withdrawal! ₹${net.toLocaleString('en-IN', { maximumFractionDigits: 2 })} credited to bank${feeStr}`)
       setForm(p => ({ ...p, amount_arcx: '' }))
       fetchMe(); loadHistory()
     } catch (err) {
@@ -191,6 +201,16 @@ export default function WalletPage() {
     ? (Number(form.amount_arcx) * nav).toFixed(2)
     : null
 
+  // Live fee preview: 0.1% of gross INR, capped at ₹8,300 (≈$100 at ₹83/$)
+  const FEE_RATE    = 0.001
+  const FEE_CAP_INR = 8300
+  const estimatedFee = estimatedInr
+    ? Math.min(Number(estimatedInr) * FEE_RATE, FEE_CAP_INR).toFixed(2)
+    : null
+  const estimatedNet = estimatedFee
+    ? (Number(estimatedInr) - Number(estimatedFee)).toFixed(2)
+    : null
+
   return (
     <div className="animate-fade-in pb-12 transition-colors duration-300">
       
@@ -205,7 +225,7 @@ export default function WalletPage() {
         {/* ── Left: Action Panel ─────────────────────────────────────── */}
         <div className="lg:col-span-2">
           
-          <div className="bg-white dark:glass-container border border-black/5 dark:border-0 rounded-[24px] p-6 max-w-md mx-auto lg:mx-0 shadow-sm dark:shadow-none transition-colors duration-300">
+          <div className="glassContainer border border-black/5 dark:border-white/5 rounded-[24px] p-6 max-w-md mx-auto lg:mx-0 shadow-sm dark:shadow-none transition-colors duration-300">
             
             {/* Balance Card inside Action Panel */}
             <div className="bg-slate-100 dark:bg-gradient-to-br dark:from-[#2C2C2E] dark:to-[#1C1C1E] border border-black/5 dark:border-white/10 rounded-xl p-5 mb-8 shadow-inner relative overflow-hidden transition-colors duration-300">
@@ -260,18 +280,34 @@ export default function WalletPage() {
                     Amount in ARCX
                   </label>
                   <div className="relative">
-                    <input className="w-full bg-slate-50 dark:bg-black/50 border border-black/10 dark:border-white/10 rounded-xl py-3 pl-4 pr-16 text-[#1D1D1F] dark:text-[#F5F5F7] placeholder:text-slate-400 dark:placeholder:text-slate-600 focus:outline-none focus:border-[#C5A059] dark:focus:border-arcx-gold transition-colors font-mono text-lg" 
+                    <input className="w-full bg-slate-50 dark:bg-black/50 border border-black/10 dark:border-white/10 rounded-xl py-3 pl-4 pr-16 text-[#1D1D1F] dark:text-[#F5F5F7] placeholder:text-slate-400 dark:placeholder:text-slate-600 focus:outline-none focus:border-[#C5A059] dark:focus:border-arcx-gold transition-colors font-mono text-lg"
                            type="number" name="amount_arcx" value={form.amount_arcx} onChange={handleChange} placeholder="10.00" min="0.01" step="0.000001" required />
                     <span className="absolute right-4 top-1/2 -translate-y-1/2 text-slate-500 font-bold text-xs uppercase transition-colors">ARCX</span>
                   </div>
+
+                  {/* Live fee breakdown preview */}
                   {estimatedInr && (
-                    <p className="text-xs text-[#C5A059] dark:text-arcx-gold mt-2 font-medium flex items-center gap-1 transition-colors">
-                      <ArrowUpRight size={12} /> Withdraws ≈ ₹{Number(estimatedInr).toLocaleString('en-IN')}
-                    </p>
+                    <div className="mt-3 rounded-xl border border-black/5 dark:border-white/10 bg-slate-50 dark:bg-black/30 divide-y divide-black/5 dark:divide-white/5 text-xs overflow-hidden">
+                      <div className="flex justify-between px-4 py-2.5">
+                        <span className="text-slate-500 font-medium">Gross Value</span>
+                        <span className="font-bold text-[#1D1D1F] dark:text-[#F5F5F7]">₹{Number(estimatedInr).toLocaleString('en-IN', { maximumFractionDigits: 2 })}</span>
+                      </div>
+                      <div className="flex justify-between items-center px-4 py-2.5">
+                        <span className="text-slate-500 font-medium flex items-center gap-1.5">
+                          Instant Liquidity Fee
+                          <span className="bg-amber-100 dark:bg-amber-500/20 text-amber-700 dark:text-amber-400 px-1.5 py-0.5 rounded text-[9px] font-bold uppercase tracking-wider">0.1% · max $100</span>
+                        </span>
+                        <span className="font-bold text-amber-600 dark:text-amber-400">−₹{Number(estimatedFee).toLocaleString('en-IN', { maximumFractionDigits: 2 })}</span>
+                      </div>
+                      <div className="flex justify-between px-4 py-2.5 bg-emerald-50 dark:bg-emerald-500/5">
+                        <span className="font-bold text-emerald-700 dark:text-emerald-400">You Receive (Instant)</span>
+                        <span className="font-bold text-emerald-700 dark:text-emerald-400">₹{Number(estimatedNet).toLocaleString('en-IN', { maximumFractionDigits: 2 })}</span>
+                      </div>
+                    </div>
                   )}
                 </div>
                 <button type="submit" className="w-full py-3.5 bg-[#1D1D1F] dark:bg-white text-white dark:text-black font-bold rounded-xl hover:bg-black dark:hover:bg-slate-200 transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2" disabled={loading}>
-                  {loading ? <Loader2 size={18} className="animate-spin" /> : 'Withdraw to Bank'}
+                  {loading ? <Loader2 size={18} className="animate-spin" /> : 'Withdraw Instantly via RTGS'}
                 </button>
               </form>
             )}
@@ -302,7 +338,7 @@ export default function WalletPage() {
 
         {/* ── Right: Transaction History ─────────────────────────────── */}
         <div className="lg:col-span-3">
-          <div className="bg-white dark:glass-container border border-black/5 dark:border-0 rounded-[24px] overflow-hidden min-h-[500px] shadow-sm dark:shadow-none transition-colors duration-300">
+          <div className="glassContainer border border-black/5 dark:border-white/5 rounded-[24px] overflow-hidden min-h-[500px] shadow-sm dark:shadow-none transition-colors duration-300">
             <div className="p-6 border-b border-black/5 dark:border-white/10 flex items-center justify-between bg-slate-50 dark:bg-black/20 transition-colors">
               <h3 className="font-display font-bold text-lg text-[#1D1D1F] dark:text-[#F5F5F7] transition-colors">Recent Transactions</h3>
               <div className="flex items-center gap-1.5 text-xs font-bold text-slate-500 uppercase tracking-widest transition-colors">

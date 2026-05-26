@@ -219,9 +219,17 @@ class Transaction(ArcxBaseModel):
     tx_type             = models.CharField(max_length=20, choices=TxType.choices, db_index=True)
     amount_arcx         = models.DecimalField(max_digits=28, decimal_places=18)
     amount_inr          = models.DecimalField(max_digits=20, decimal_places=4)
+    fee_inr             = models.DecimalField(
+        max_digits=20, decimal_places=4, default=0,
+        help_text="Instant liquidity fee charged on Route A withdrawals (0.1%, max $100 equivalent)"
+    )
     nav_at_tx           = models.DecimalField(max_digits=20, decimal_places=4)
     status              = models.CharField(
         max_length=20, choices=Status.choices, default=Status.PENDING, db_index=True
+    )
+    settlement_date     = models.DateTimeField(
+        null=True, blank=True,
+        help_text="For Route B (T+2 standard) withdrawals: when INR settles to bank"
     )
     counterparty_wallet = models.ForeignKey(
         Wallet,

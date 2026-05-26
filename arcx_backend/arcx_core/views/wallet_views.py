@@ -16,6 +16,7 @@ Endpoints:
 """
  
 import logging
+from decimal import Decimal
 from rest_framework.views import APIView
 from rest_framework.response import Response
 from rest_framework import status
@@ -141,6 +142,8 @@ class WithdrawView(APIView):
         return Response(
             {
                 "transaction_id": str(tx.id),
+                "gross_inr":      str((tx.amount_inr + tx.fee_inr).quantize(Decimal("0.0001"))),
+                "fee_inr":        str(tx.fee_inr),
                 "inr_returned":   str(tx.amount_inr),
                 "nav_at_tx":      str(tx.nav_at_tx),
                 "new_balance":    str(wallet.arcx_balance),

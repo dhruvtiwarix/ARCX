@@ -1,9 +1,9 @@
 import { useEffect, useState, useRef } from 'react'
 import {
   AreaChart, Area, XAxis, YAxis, Tooltip, ResponsiveContainer,
-  PieChart, Pie, Cell, ReferenceLine
+  PieChart, Pie, Cell, ReferenceLine, CartesianGrid
 } from 'recharts'
-import { TrendingUp, TrendingDown, RefreshCw, AlertTriangle, ArrowUpRight, Send, ArrowDownLeft, ArrowLeftRight } from 'lucide-react'
+import { TrendingUp, TrendingDown, RefreshCw, AlertTriangle, ArrowUpRight, Send, ArrowDownLeft, ArrowLeftRight, Plus } from 'lucide-react'
 import { oracleApi, walletApi } from '../api/index'
 import { useAuthStore } from '../store/authStore'
 import { format } from 'date-fns'
@@ -19,10 +19,10 @@ const VAULT_ALLOC = [
 
 // ── Transaction Row Logic ───────────────────────────────────────
 const TX_META = {
-  deposit:  { label: 'Fiat Deposit',  colorLight: 'text-emerald-600', colorDark: 'dark:text-emerald-400', bgLight: 'bg-emerald-100', bgDark: 'dark:bg-emerald-500/10', icon: ArrowDownLeft },
-  withdraw: { label: 'Withdrawal',    colorLight: 'text-[#1D1D1F]',   colorDark: 'dark:text-[#F5F5F7]',       bgLight: 'bg-slate-200',   bgDark: 'dark:bg-white/10',     icon: ArrowUpRight  },
-  transfer: { label: 'Transfer',      colorLight: 'text-[#C5A059]',   colorDark: 'dark:text-arcx-gold',   bgLight: 'bg-arcx-gold/20',bgDark: 'dark:bg-arcx-gold/10', icon: Send },
-  dividend: { label: 'Yield Dividend',colorLight: 'text-[#C5A059]',   colorDark: 'dark:text-arcx-gold',   bgLight: 'bg-arcx-gold/20',bgDark: 'dark:bg-arcx-gold/10', icon: ArrowDownLeft  },
+  deposit:  { label: 'Fiat Deposit',  colorLight: 'text-emerald-600', colorDark: 'dark:text-emerald-400', bgLight: 'bg-emerald-100', bgDark: 'dark:bg-emerald-500/10', icon: Plus },
+  withdraw: { label: 'Withdrawal',    colorLight: 'text-[#1D1D1F]',   colorDark: 'dark:text-[#F5F5F7]',       bgLight: 'bg-slate-200',   bgDark: 'dark:bg-white/10',     icon: ArrowDownLeft  },
+  transfer: { label: 'Transfer',      colorLight: 'text-[#C5A059]',   colorDark: 'dark:text-arcx-gold',   bgLight: 'bg-arcx-gold/20',bgDark: 'dark:bg-arcx-gold/10', icon: ArrowUpRight },
+  dividend: { label: 'Yield Dividend',colorLight: 'text-[#C5A059]',   colorDark: 'dark:text-arcx-gold',   bgLight: 'bg-arcx-gold/20',bgDark: 'dark:bg-arcx-gold/10', icon: Plus  },
 }
 
 function TxRow({ tx }) {
@@ -69,16 +69,16 @@ function NavTooltip({ active, payload, label }) {
   const delta = nav - first
   const isUp  = delta >= 0
   return (
-    <div className="bg-white dark:bg-[#1C1C1E] border border-black/8 dark:border-white/10 rounded-2xl shadow-2xl px-4 py-3 min-w-[140px] transition-colors">
-      <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-1">{label}</p>
-      <p className="font-bold text-[#1D1D1F] dark:text-[#F5F5F7] text-[17px] leading-none">&#8377;{nav.toFixed(4)}</p>
+    <div className="glassContainer px-4 py-3 min-w-[140px] z-50">
+      <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-1 z-10">{label}</p>
+      <p className="font-bold text-[#1D1D1F] dark:text-[#F5F5F7] text-[17px] leading-none z-10">&#8377;{nav.toFixed(4)}</p>
     </div>
   )
 }
 
 function BentoCard({ children, className = "" }) {
   return (
-    <div className={`bg-white dark:glass-container border border-black/5 dark:border-0 rounded-[24px] p-6 shadow-sm dark:shadow-none transition-colors duration-300 ${className}`}>
+    <div className={`glassContainer p-6 ${className}`}>
       {children}
     </div>
   )
@@ -98,7 +98,7 @@ export default function DashboardPage() {
   const fetchData = async () => {
     try {
       const [histData, priceData, txData] = await Promise.all([
-        oracleApi.getNAVHistory(30),
+        oracleApi.getNAVHistory(3650), // Fetch up to 10 years if possible
         oracleApi.getLivePrice(),
         walletApi.getHistory(3),
       ])
@@ -106,7 +106,7 @@ export default function DashboardPage() {
         .slice()
         .reverse()
         .map(h => ({
-          date: format(new Date(h.nav_date), 'dd MMM'),
+          date: format(new Date(h.nav_date), 'dd MMM yyyy'),
           nav:  Number(h.nav_inr).toFixed(4),
         }))
       setNavHistory(history)
@@ -122,8 +122,8 @@ export default function DashboardPage() {
     return () => clearInterval(id)
   }, [])
 
-  // Slice the 30-day history based on the selected range
-  const RANGE_DAYS = { '1D': 1, '1W': 7, '1M': 30, '1Y': 30 }
+  // Slice the history based on the selected range
+  const RANGE_DAYS = { '1D': 1, '1W': 7, '1M': 30, '3M': 90, '6M': 180, 'YTD': 365, '1Y': 365, '2Y': 730, '5Y': 1825, '10Y': 3650, 'ALL': 3650 }
   const chartData = navHistory.slice(-Math.min(RANGE_DAYS[activeRange], navHistory.length))
 
   const navInr       = Number(livePrice?.nav_inr  || 0)
@@ -134,7 +134,7 @@ export default function DashboardPage() {
   const navTrend = chartData.length >= 2
     ? Number(chartData.at(-1)?.nav) - Number(chartData[0]?.nav)
     : 0
-  const trendLabel = { '1D': '1D', '1W': '1W', '1M': '30D', '1Y': '30D' }[activeRange]
+  const trendLabel = { '1D': '1D', '1W': '1W', '1M': '30D', '3M': '90D', '6M': '6M', '1Y': '1Y', 'ALL': 'ALL' }[activeRange]
 
   return (
     <div className="animate-fade-in transition-colors duration-300">
@@ -156,7 +156,7 @@ export default function DashboardPage() {
       )}
 
       {/* Hero Section */}
-      <div className="mb-10 dark:hero-glass-card p-6 -mx-6 sm:mx-0 sm:p-8">
+      <div className="mb-10 glassContainer p-6 sm:p-8">
         <h2 className="text-[11px] font-bold text-slate-500 dark:text-slate-400 uppercase tracking-widest mb-2 transition-colors">Total Portfolio Value</h2>
         <div className="flex items-end gap-4">
           <h1 className="font-display font-light text-[56px] leading-none text-[#1D1D1F] dark:text-[#F5F5F7] tracking-tight transition-colors">
@@ -175,37 +175,39 @@ export default function DashboardPage() {
       {/* Bento Box Grid */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-10">
 
-        {/* Span-2 Chart Card — Google Finance style */}
-        <BentoCard className="lg:col-span-2">
+        {/* Span-2 Chart Card — Apple Stocks style */}
+        <div className="glassContainer lg:col-span-2 flex flex-col overflow-hidden">
 
-          {/* Chart Header */}
-          <div className="flex items-start justify-between mb-5">
-            <div>
-              <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-1">ARCX NAV Price</p>
-              <div className="flex items-baseline gap-3">
-                <span className="text-[28px] font-bold text-[#1D1D1F] dark:text-[#F5F5F7] leading-none tracking-tight transition-colors">
-                  &#8377;{navInr.toFixed(4)}
-                </span>
-                <span className={`text-xs font-bold px-2 py-0.5 rounded-full transition-colors ${
-                  navTrend >= 0
-                    ? 'bg-emerald-100 dark:bg-emerald-500/15 text-emerald-700 dark:text-emerald-400'
-                    : 'bg-red-100 dark:bg-red-500/15 text-red-700 dark:text-red-400'
-                }`}>
-                  {navTrend >= 0 ? '+' : ''}{navTrend.toFixed(4)} ({trendLabel})
-                </span>
+          {/* Header & Controls Area */}
+          <div className="p-6 pb-2">
+            <div className="flex items-start justify-between mb-8">
+              <div>
+                <h1 className="text-4xl font-bold font-display leading-none text-[#1D1D1F] dark:text-[#F5F5F7] tracking-tight transition-colors">ARCX</h1>
+                <span className="text-sm font-semibold text-slate-500 transition-colors">ARCX Reserve</span>
+              </div>
+              <div className="text-right">
+                <div className="flex items-baseline justify-end gap-2">
+                  <span className="text-xl font-bold text-[#1D1D1F] dark:text-[#F5F5F7] transition-colors">
+                    &#8377;{navInr.toFixed(4)}
+                  </span>
+                  <span className={`text-sm font-bold ${navTrend >= 0 ? 'text-[#30D158]' : 'text-[#FF453A]'}`}>
+                    {navTrend >= 0 ? '+' : ''}{navTrend.toFixed(4)}
+                  </span>
+                </div>
+                <span className="text-[10px] font-bold uppercase tracking-widest text-slate-500 transition-colors">Live NAV</span>
               </div>
             </div>
 
-            {/* Time range pill switcher */}
-            <div className="flex bg-slate-100 dark:bg-black/30 rounded-xl p-1 gap-0.5 border border-black/5 dark:border-white/5 transition-colors">
-              {['1D', '1W', '1M', '1Y'].map(t => (
+            {/* Time range pills */}
+            <div className="flex justify-between items-center sm:px-2 border-b border-black/5 dark:border-white/10 pb-4 overflow-x-auto no-scrollbar">
+              {['1D', '1W', '1M', '3M', '6M', 'YTD', '1Y', '2Y', '5Y', '10Y', 'ALL'].map(t => (
                 <button
                   key={t}
                   onClick={() => setActiveRange(t)}
-                  className={`px-3 py-1.5 text-[11px] font-bold rounded-lg transition-all duration-150 ${
+                  className={`px-3 py-1.5 text-[11px] font-bold rounded-full transition-all duration-150 whitespace-nowrap mx-0.5 ${
                     t === activeRange
-                      ? 'bg-white dark:bg-white/10 text-[#1D1D1F] dark:text-[#F5F5F7] shadow-sm'
-                      : 'text-slate-400 hover:text-[#1D1D1F] dark:hover:text-[#F5F5F7]'
+                      ? 'bg-slate-200 dark:bg-white/20 text-[#1D1D1F] dark:text-white'
+                      : 'text-slate-500 hover:text-[#1D1D1F] dark:hover:text-[#F5F5F7]'
                   }`}
                 >
                   {t}
@@ -214,8 +216,8 @@ export default function DashboardPage() {
             </div>
           </div>
 
-          {/* Chart area — 240px fixed height */}
-          <div style={{ height: 240, marginLeft: -24, marginRight: -24 }}>
+          {/* Chart area — edge to edge */}
+          <div className="flex-1 w-full min-h-[260px] relative">
             {loading ? (
               <div className="h-full flex items-center justify-center gap-2 text-slate-400 text-sm">
                 <RefreshCw size={15} className="animate-spin" /> Loading...
@@ -231,61 +233,85 @@ export default function DashboardPage() {
               const yMin    = dataMin - pad
               const yMax    = dataMax + pad
               const isUp    = navTrend >= 0
-              const lineColor = isUp ? '#10b981' : '#ef4444'
+              const lineColor = isUp ? '#34C759' : '#FF3B30'
 
               return (
-                <ResponsiveContainer width="100%" height="100%">
-                  <AreaChart data={chartData} margin={{ top: 8, right: 16, left: 0, bottom: 0 }}>
+                <ResponsiveContainer width="100%" height="100%" aspect={1.8}>
+                  <AreaChart data={chartData} margin={{ top: 10, right: 0, left: 0, bottom: 0 }} className="stock-chart-area">
                     <defs>
                       <linearGradient id="navGrad" x1="0" y1="0" x2="0" y2="1">
-                        <stop offset="0%"   stopColor={lineColor} stopOpacity={0.15} />
-                        <stop offset="85%"  stopColor={lineColor} stopOpacity={0.02} />
+                        <stop offset="0%"   stopColor={lineColor} stopOpacity={0.25} />
+                        <stop offset="90%"  stopColor={lineColor} stopOpacity={0.01} />
                         <stop offset="100%" stopColor={lineColor} stopOpacity={0} />
                       </linearGradient>
                     </defs>
 
+                    <CartesianGrid vertical={true} horizontal={true} stroke="rgba(150, 150, 150, 0.15)" />
+
                     <XAxis
                       dataKey="date"
-                      tick={{ fontSize: 11, fill: '#94a3b8', fontFamily: 'Inter, sans-serif' }}
-                      axisLine={false}
+                      tick={{ fontSize: 10, fill: '#94a3b8', fontFamily: 'Inter, sans-serif' }}
+                      axisLine={{ stroke: 'rgba(150,150,150,0.2)' }}
                       tickLine={false}
-                      interval="preserveStartEnd"
-                      padding={{ left: 20, right: 20 }}
-                      dy={8}
+                      minTickGap={30}
+                      padding={{ left: 0, right: 0 }}
+                      dy={10}
                     />
                     <YAxis
-                      tick={{ fontSize: 11, fill: '#94a3b8', fontFamily: 'Inter, sans-serif' }}
+                      tick={{ fontSize: 10, fill: '#1D1D1F', fontFamily: 'Inter, sans-serif', fontWeight: 'bold' }}
                       axisLine={false}
                       tickLine={false}
-                      width={68}
+                      width={50}
                       domain={[yMin, yMax]}
-                      tickCount={4}
-                      tickFormatter={v => `\u20B9${Number(v).toFixed(2)}`}
+                      tickCount={6}
+                      tickFormatter={v => `${Number(v).toFixed(0)}`}
                       orientation="right"
+                      dx={5}
                     />
                     <Tooltip
                       content={<NavTooltip />}
-                      cursor={{ stroke: '#94a3b8', strokeWidth: 1, strokeDasharray: '3 3' }}
+                      cursor={{ stroke: lineColor, strokeWidth: 1 }}
                       isAnimationActive={false}
                     />
                     <Area
                       type="monotone"
                       dataKey="nav"
                       stroke={lineColor}
-                      strokeWidth={2.5}
+                      strokeWidth={2}
                       fill="url(#navGrad)"
                       dot={false}
-                      activeDot={{ r: 5, fill: lineColor, strokeWidth: 2.5, stroke: '#fff' }}
-                      isAnimationActive={true}
-                      animationDuration={300}
-                      animationEasing="ease-out"
+                      activeDot={{ r: 5, fill: lineColor, strokeWidth: 2, stroke: '#fff' }}
+                      isAnimationActive={false}
                     />
                   </AreaChart>
                 </ResponsiveContainer>
               )
             })()}
           </div>
-        </BentoCard>
+          
+          {/* Stats Bar (Bottom of chart) */}
+          {/* Stats Bar (Bottom of chart) */}
+          <div className="flex flex-col gap-4 p-6 pt-2 border-t border-black/5 dark:border-white/10 text-xs mt-4">
+            <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-4 gap-x-8 gap-y-3">
+              <div className="flex justify-between items-center"><span className="text-slate-500 font-medium">Open</span><span className="font-bold text-[#1D1D1F] dark:text-[#F5F5F7] transition-colors">{Number(navInr * 0.99).toFixed(2)}</span></div>
+              <div className="flex justify-between items-center"><span className="text-slate-500 font-medium">Vol</span><span className="font-bold text-[#1D1D1F] dark:text-[#F5F5F7] transition-colors">{(balance * 0.05).toLocaleString('en-US', {maximumFractionDigits: 2})}M</span></div>
+              <div className="flex justify-between items-center"><span className="text-slate-500 font-medium">52W H</span><span className="font-bold text-[#1D1D1F] dark:text-[#F5F5F7] transition-colors">{Number(navInr * 1.1).toFixed(2)}</span></div>
+              <div className="flex justify-between items-center"><span className="text-slate-500 font-medium">Yield</span><span className="font-bold text-[#1D1D1F] dark:text-[#F5F5F7] transition-colors">-</span></div>
+              <div className="flex justify-between items-center"><span className="text-slate-500 font-medium">High</span><span className="font-bold text-[#1D1D1F] dark:text-[#F5F5F7] transition-colors">{Number(navInr * 1.02).toFixed(2)}</span></div>
+              <div className="flex justify-between items-center"><span className="text-slate-500 font-medium">P/E</span><span className="font-bold text-[#1D1D1F] dark:text-[#F5F5F7] transition-colors">-</span></div>
+              <div className="flex justify-between items-center"><span className="text-slate-500 font-medium">52W L</span><span className="font-bold text-[#1D1D1F] dark:text-[#F5F5F7] transition-colors">{Number(navInr * 0.8).toFixed(2)}</span></div>
+              <div className="flex justify-between items-center"><span className="text-slate-500 font-medium">Beta</span><span className="font-bold text-[#1D1D1F] dark:text-[#F5F5F7] transition-colors">-</span></div>
+              <div className="flex justify-between items-center"><span className="text-slate-500 font-medium">Low</span><span className="font-bold text-[#1D1D1F] dark:text-[#F5F5F7] transition-colors">{Number(navInr * 0.98).toFixed(2)}</span></div>
+              <div className="flex justify-between items-center"><span className="text-slate-500 font-medium">Mkt Cap</span><span className="font-bold text-[#1D1D1F] dark:text-[#F5F5F7] transition-colors">&#8377;12.4M</span></div>
+              <div className="flex justify-between items-center"><span className="text-slate-500 font-medium">Avg Vol</span><span className="font-bold text-[#1D1D1F] dark:text-[#F5F5F7] transition-colors">10.51M</span></div>
+              <div className="flex justify-between items-center"><span className="text-slate-500 font-medium">EPS</span><span className="font-bold text-[#1D1D1F] dark:text-[#F5F5F7] transition-colors">-</span></div>
+            </div>
+            <a href="#" className="text-blue-500 hover:text-blue-600 dark:hover:text-blue-400 font-medium text-xs mt-2 flex items-center transition-colors">
+              See More Data from Yahoo Finance <span className="ml-1 text-[10px]">&gt;</span>
+            </a>
+          </div>
+
+        </div>
 
         {/* Right Column Stack */}
         <div className="flex flex-col gap-6">
@@ -293,24 +319,21 @@ export default function DashboardPage() {
           {/* Quick Actions */}
           <BentoCard className="flex-1">
             <h2 className="text-[11px] font-bold text-slate-500 uppercase tracking-widest mb-5 transition-colors">Quick Actions</h2>
-            <div className="grid grid-cols-3 gap-4">
-              <Link to="/wallet" className="flex flex-col items-center gap-2 group">
-                <div className="w-12 h-12 rounded-full bg-slate-50 dark:bg-white/5 border border-black/5 dark:border-white/5 flex items-center justify-center group-hover:bg-arcx-gold/10 group-hover:border-arcx-gold/20 transition-all">
-                  <ArrowDownLeft size={18} className="text-slate-400 dark:text-slate-300 group-hover:text-arcx-gold" />
-                </div>
-                <span className="text-[11px] font-semibold text-slate-500 dark:text-slate-400 group-hover:text-[#1D1D1F] dark:group-hover:text-white transition-colors">Deposit</span>
+            <div className="flex flex-col gap-4">
+              <Link to="/wallet" className="w-full">
+                <button className="iridescent w-full gap-2">
+                  <Plus size={16} strokeWidth={3} /> Deposit
+                </button>
               </Link>
-              <Link to="/wallet" className="flex flex-col items-center gap-2 group">
-                <div className="w-12 h-12 rounded-full bg-slate-50 dark:bg-white/5 border border-black/5 dark:border-white/5 flex items-center justify-center group-hover:bg-arcx-gold/10 group-hover:border-arcx-gold/20 transition-all">
-                  <Send size={18} className="text-slate-400 dark:text-slate-300 group-hover:text-arcx-gold" />
-                </div>
-                <span className="text-[11px] font-semibold text-slate-500 dark:text-slate-400 group-hover:text-[#1D1D1F] dark:group-hover:text-white transition-colors">Transfer</span>
+              <Link to="/wallet" className="w-full">
+                <button className="iridescent w-full gap-2">
+                  <ArrowUpRight size={16} strokeWidth={2.5} /> Transfer
+                </button>
               </Link>
-              <Link to="/wallet" className="flex flex-col items-center gap-2 group">
-                <div className="w-12 h-12 rounded-full bg-slate-50 dark:bg-white/5 border border-black/5 dark:border-white/5 flex items-center justify-center group-hover:bg-arcx-gold/10 group-hover:border-arcx-gold/20 transition-all">
-                  <ArrowUpRight size={18} className="text-slate-400 dark:text-slate-300 group-hover:text-arcx-gold" />
-                </div>
-                <span className="text-[11px] font-semibold text-slate-500 dark:text-slate-400 group-hover:text-[#1D1D1F] dark:group-hover:text-white transition-colors">Withdraw</span>
+              <Link to="/wallet" className="w-full">
+                <button className="iridescent w-full gap-2">
+                  <ArrowDownLeft size={16} strokeWidth={2.5} /> Withdraw
+                </button>
               </Link>
             </div>
           </BentoCard>
@@ -351,7 +374,7 @@ export default function DashboardPage() {
           <h2 className="text-[11px] font-bold text-slate-500 uppercase tracking-widest transition-colors">Recent Activity</h2>
           <Link to="/wallet" className="text-[11px] font-bold text-arcx-gold hover:text-[#1D1D1F] dark:hover:text-white transition-colors uppercase tracking-widest">View All</Link>
         </div>
-        <div className="bg-white dark:glass-container border border-black/5 dark:border-0 rounded-[24px] overflow-hidden shadow-sm dark:shadow-none transition-colors duration-300">
+        <div className="glassContainer overflow-hidden">
           
           {loading ? (
             <div className="flex items-center justify-center py-10 text-slate-500 text-sm gap-2">

@@ -23,7 +23,7 @@ const TX_COLORS = {
 
 function StatCard({ label, value, sub, icon: Icon, accent = false }) {
   return (
-    <div className="bg-white dark:glass-container border border-black/5 dark:border-0 rounded-[24px] p-5 shadow-sm dark:shadow-none transition-colors duration-300">
+    <div className="glassContainer border border-black/5 dark:border-white/5 rounded-[24px] p-5 shadow-sm dark:shadow-none transition-colors duration-300">
       <div className="flex items-start justify-between mb-3">
         <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">{label}</p>
         {Icon && (
@@ -45,7 +45,7 @@ function PnLTooltip({ active, payload, label }) {
   const pnl = pv - cb
   const up  = pnl >= 0
   return (
-    <div className="bg-white dark:bg-[#1C1C1E] border border-black/8 dark:border-white/10 rounded-2xl shadow-2xl px-4 py-3 min-w-[170px]">
+    <div className="glassContainer px-4 py-3 min-w-[170px] z-50">
       <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-2">{label}</p>
       <div className="space-y-1">
         <div className="flex justify-between gap-6">
@@ -228,8 +228,7 @@ export default function PortfolioPage() {
       {/* ── P&L Chart + Donut ────────────────────────────────────────────── */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
 
-        {/* P&L Over Time — spans 2 cols */}
-        <div className="lg:col-span-2 bg-white dark:glass-container border border-black/5 dark:border-0 rounded-[24px] p-6 shadow-sm dark:shadow-none transition-colors duration-300">
+        <div className="lg:col-span-2 glassContainer border border-black/5 dark:border-white/5 rounded-[24px] p-6 shadow-sm dark:shadow-none transition-colors duration-300">
           <div className="mb-5">
             <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-1">Portfolio Value vs. Cost Basis</p>
             <p className="text-xs text-slate-400">Green = Current value &nbsp;·&nbsp; Dashed = What you invested</p>
@@ -287,7 +286,7 @@ export default function PortfolioPage() {
         </div>
 
         {/* Transaction Breakdown Donut */}
-        <div className="bg-white dark:glass-container border border-black/5 dark:border-0 rounded-[24px] p-6 shadow-sm dark:shadow-none transition-colors duration-300">
+        <div className="glassContainer border border-black/5 dark:border-white/5 rounded-[24px] p-6 shadow-sm dark:shadow-none transition-colors duration-300">
           <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-5">Activity Breakdown</p>
           <div style={{ height: 140 }}>
             <ResponsiveContainer width="100%" height="100%">
@@ -335,7 +334,7 @@ export default function PortfolioPage() {
       </div>
 
       {/* ── Transaction History ───────────────────────────────────────────── */}
-      <div className="bg-white dark:glass-container border border-black/5 dark:border-0 rounded-[24px] overflow-hidden shadow-sm dark:shadow-none transition-colors duration-300">
+      <div className="glassContainer border border-black/5 dark:border-white/5 rounded-[24px] overflow-hidden shadow-sm dark:shadow-none transition-colors duration-300">
         {/* Header + filter tabs */}
         <div className="px-5 py-4 border-b border-black/5 dark:border-white/10 flex flex-wrap items-center justify-between gap-3">
           <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Transaction History</p>

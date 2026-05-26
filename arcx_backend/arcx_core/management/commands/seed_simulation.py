@@ -307,7 +307,7 @@ class Command(BaseCommand):
                             + timedelta(hours=random.randint(9, 17), minutes=random.randint(0, 59))
                 tx_time   = timezone.make_aware(tx_time)
 
-                Transaction.objects.get_or_create(
+                obj_dep, created_dep = Transaction.objects.get_or_create(
                     idempotency_key = uuid.uuid5(uuid.NAMESPACE_DNS, f"deposit-{arcx_user.id}-{day_i}"),
                     defaults={
                         "wallet":      wallet,
@@ -316,9 +316,10 @@ class Command(BaseCommand):
                         "amount_inr":  Decimal(str(inr_amt)),
                         "nav_at_tx":   nav_inr,
                         "status":      Transaction.Status.COMPLETED,
-                        "created_at":  tx_time,
                     },
                 )
+                if created_dep:
+                    Transaction.objects.filter(pk=obj_dep.pk).update(created_at=tx_time)
                 total_arcx += arcx_qty
                 total_cost += Decimal(str(inr_amt))
 
@@ -332,7 +333,7 @@ class Command(BaseCommand):
                              + timedelta(hours=11, minutes=30)
                 tx_time    = timezone.make_aware(tx_time)
 
-                Transaction.objects.get_or_create(
+                obj_send, created_send = Transaction.objects.get_or_create(
                     idempotency_key = uuid.uuid5(uuid.NAMESPACE_DNS, f"transfer-alice-bob-14"),
                     defaults={
                         "wallet":               wallet,
@@ -342,13 +343,15 @@ class Command(BaseCommand):
                         "nav_at_tx":            nav_inr,
                         "status":               Transaction.Status.COMPLETED,
                         "counterparty_wallet":  bob_wallet,
-                        "created_at":           tx_time,
                     },
                 )
+                if created_send:
+                    Transaction.objects.filter(pk=obj_send.pk).update(created_at=tx_time)
+                    
                 total_arcx -= send_qty
 
                 # Bob receives credit
-                Transaction.objects.get_or_create(
+                obj_recv, created_recv = Transaction.objects.get_or_create(
                     idempotency_key = uuid.uuid5(uuid.NAMESPACE_DNS, f"transfer-alice-bob-14-recv"),
                     defaults={
                         "wallet":               bob_wallet,
@@ -358,9 +361,10 @@ class Command(BaseCommand):
                         "nav_at_tx":            nav_inr,
                         "status":               Transaction.Status.COMPLETED,
                         "counterparty_wallet":  wallet,
-                        "created_at":           tx_time + timedelta(seconds=1),
                     },
                 )
+                if created_recv:
+                    Transaction.objects.filter(pk=obj_recv.pk).update(created_at=tx_time + timedelta(seconds=1))
 
             # ── Dividends (every 3 days from when user first deposited) ──
             first_day_i = deposit_schedule[idx][0][0]
@@ -374,7 +378,7 @@ class Command(BaseCommand):
                              + timedelta(hours=0, minutes=1)
                 tx_time    = timezone.make_aware(tx_time)
 
-                Transaction.objects.get_or_create(
+                obj_div, created_div = Transaction.objects.get_or_create(
                     idempotency_key = uuid.uuid5(uuid.NAMESPACE_DNS, f"dividend-{arcx_user.id}-{day_i}"),
                     defaults={
                         "wallet":      wallet,
@@ -383,17 +387,21 @@ class Command(BaseCommand):
                         "amount_inr":  div_arcx * nav_inr,
                         "nav_at_tx":   nav_inr,
                         "status":      Transaction.Status.COMPLETED,
-                        "created_at":  tx_time,
                     },
                 )
+                if created_div:
+                    Transaction.objects.filter(pk=obj_div.pk).update(created_at=tx_time)
                 total_arcx += div_arcx
 
             # ── Update wallet final balance ────────────────────────────────
             with transaction.atomic():
                 w = Wallet.objects.select_for_update().get(pk=wallet.pk)
-                w.arcx_balance   = total_arcx
+                # Compute actual db balance to avoid undercounting external transfers
+                db_balance = sum(t.amount_arcx for t in Transaction.objects.filter(wallet=w, status=Transaction.Status.COMPLETED))
+                w.arcx_balance   = db_balance
                 w.cost_basis_inr = total_cost
                 w.save(update_fields=["arcx_balance", "cost_basis_inr", "updated_at"])
+                total_arcx = db_balance
 
             self.stdout.write(
                 f"    ✓ {arcx_user.full_name:15s} → "
@@ -412,11 +420,13 @@ class Command(BaseCommand):
         # Delete transactions first (FK constraints)
         arcx_users = User.objects.filter(email__in=emails)
         wallet_ids = Wallet.objects.filter(user__in=arcx_users).values_list("id", flat=True)
+        arcx_user_ids = [str(u.id) for u in arcx_users]
+        
         Transaction.objects.filter(wallet_id__in=wallet_ids).delete()
         KYCRecord.objects.filter(user__in=arcx_users).delete()
         Wallet.objects.filter(user__in=arcx_users).delete()
         arcx_users.delete()
-        DjangoUser.objects.filter(username__in=emails).delete()
+        DjangoUser.objects.filter(username__in=arcx_user_ids).delete()
 
         # Wipe NAV history (cascade-safe since VaultSnapshot → NAVHistory)
         NAVHistory.objects.all().delete()

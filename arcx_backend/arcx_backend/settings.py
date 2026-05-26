@@ -45,8 +45,13 @@ INSTALLED_APPS = [
     "rest_framework",
     "rest_framework_simplejwt",
     "rest_framework_simplejwt.token_blacklist",
+    "django_apscheduler",   # Phase 12 — in-process scheduler (no Redis required)
     "arcx_core",
 ]
+
+# ── APScheduler (Phase 12) ────────────────────────────────────────────────────
+APSCHEDULER_DATETIME_FORMAT = "N j, Y, f:s a"
+APSCHEDULER_RUN_NOW_TIMEOUT = 25   # seconds
 
 MIDDLEWARE = [
     "arcx_core.middleware.RequestLoggingMiddleware", # <-- ADD THIS FIRST

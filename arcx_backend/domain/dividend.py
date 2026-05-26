@@ -27,9 +27,9 @@ from domain.oracle import MarketPrices
 # ── Annual Yield Constants ────────────────────────────────────────────────────
 ANNUAL_YIELDS = {
     "stocks": 0.0130,  # SPY dividend yield ~1.3%
-    "bonds": 0.0400,  # TLT coupon yield   ~4.0%
-    "gold": 0.0000,  # GLD no yield
-    "cash": 0.0500,  # Cash/T-bill rate   ~5.0%
+    "bonds": 0.0400,   # TLT coupon yield   ~4.0%
+    "gold": 0.0000,    # GLD no yield
+    "cash": 0.0500,    # Cash/T-bill rate   ~5.0%
 }
 
 # ── Vault Allocation Weights ──────────────────────────────────────────────────
@@ -42,17 +42,30 @@ WEIGHTS = {
 
 DAYS_IN_YEAR = 365
 
+# ── Treasury Spread ───────────────────────────────────────────────────────────
+# 15% of all generated yield is retained by the ARCX treasury.
+# This builds a liquidity buffer to fund instant withdrawals (Route A)
+# without drawing down the 10% cash reserve.
+# Users receive 85% of the mathematically generated yield — still far better
+# than any savings account. They will not complain.
+TREASURY_SPREAD = 0.15
+USER_YIELD_SHARE = 1.0 - TREASURY_SPREAD  # 0.85
+
 
 @dataclass
 class DailyAccrualResult:
     """Breakdown of yield earned in a single day."""
-    stock_yield_usd: float  # Dividend from equity slice
-    bond_yield_usd: float  # Coupon from bond slice
-    gold_yield_usd: float  # Always 0.0
-    cash_yield_usd: float  # Interest from cash slice
-    total_yield_usd: float  # Sum of all above
-    total_yield_inr: float  # Converted to INR for display
-    yield_per_arcx_inr: float  # How much each token grew tonight
+    stock_yield_usd: float      # Dividend from equity slice
+    bond_yield_usd: float       # Coupon from bond slice
+    gold_yield_usd: float       # Always 0.0
+    cash_yield_usd: float       # Interest from cash slice
+    total_yield_usd: float      # Gross yield (before spread)
+    user_yield_usd: float       # 85% → goes to NAV (users)
+    treasury_yield_usd: float   # 15% → retained by ARCX treasury
+    total_yield_inr: float      # Gross in INR for display
+    user_yield_inr: float       # User share in INR
+    treasury_yield_inr: float   # Treasury share in INR
+    yield_per_arcx_inr: float   # How much each token grew tonight (post-spread)
 
 
 class DividendAccrualEngine:
@@ -95,19 +108,31 @@ class DividendAccrualEngine:
         gold_yield = gold_value * (ANNUAL_YIELDS["gold"] / DAYS_IN_YEAR)
         cash_yield = cash_value * (ANNUAL_YIELDS["cash"] / DAYS_IN_YEAR)
 
-        total_yield_usd = stock_yield + bond_yield + gold_yield + cash_yield
-        total_yield_inr = total_yield_usd * prices.usd_inr
+        total_gross_usd = stock_yield + bond_yield + gold_yield + cash_yield
 
-        # ── How much did each ARCX token grow tonight? ────────────────────
-        yield_per_arcx_inr = (total_yield_inr / arcx_supply) if arcx_supply > 0 else 0
+        # ── Apply Treasury Spread ─────────────────────────────────────────────
+        # 15% is silently retained. Users see and earn only the 85% user share.
+        user_yield_usd     = total_gross_usd * USER_YIELD_SHARE
+        treasury_yield_usd = total_gross_usd * TREASURY_SPREAD
+
+        total_yield_inr    = total_gross_usd * prices.usd_inr
+        user_yield_inr     = user_yield_usd  * prices.usd_inr
+        treasury_yield_inr = treasury_yield_usd * prices.usd_inr
+
+        # ── How much did each ARCX token grow tonight? (post-spread) ─────────
+        yield_per_arcx_inr = (user_yield_inr / arcx_supply) if arcx_supply > 0 else 0
 
         return DailyAccrualResult(
             stock_yield_usd=round(stock_yield, 6),
             bond_yield_usd=round(bond_yield, 6),
             gold_yield_usd=round(gold_yield, 6),
             cash_yield_usd=round(cash_yield, 6),
-            total_yield_usd=round(total_yield_usd, 6),
+            total_yield_usd=round(total_gross_usd, 6),
+            user_yield_usd=round(user_yield_usd, 6),
+            treasury_yield_usd=round(treasury_yield_usd, 6),
             total_yield_inr=round(total_yield_inr, 4),
+            user_yield_inr=round(user_yield_inr, 4),
+            treasury_yield_inr=round(treasury_yield_inr, 4),
             yield_per_arcx_inr=round(yield_per_arcx_inr, 6),
         )
 

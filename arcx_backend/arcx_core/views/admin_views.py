@@ -14,6 +14,7 @@ from django.db import transaction
 from arcx_core.models import User, Wallet, KYCRecord, CircuitBreakerLog
 from domain.valuation import ValuationEngine
 from domain.oracle import MultiSourceOracle
+from arcx_core.tasks.eod_tasks import take_vault_snapshot, publish_daily_nav
 
 logger = logging.getLogger("arcx.views.admin")
 
@@ -26,7 +27,7 @@ class AdminUserListView(APIView):
     permission_classes = [IsAdminUser]
 
     def get(self, request):
-        users = User.objects.select_related("wallet").filter(deleted_at__isnull=True).order_by("-created_at")
+        users = User.objects.select_related("wallet").filter(deleted_at__isnull=True).order_by("-created_at")[:100]
         data = []
         for u in users:
             try:
@@ -82,7 +83,7 @@ class AdminKYCView(APIView):
 
         try:
             with transaction.atomic():
-                record = KYCRecord.objects.select_for_update().get(id=record_id)
+                record = KYCRecord.objects.select_related("user").select_for_update().get(id=record_id)
                 if record.status != KYCRecord.Status.PENDING:
                     return Response({"error": "KYC record is not pending."}, status=400)
                 
@@ -113,14 +114,14 @@ class AdminNAVComputerView(APIView):
     def post(self, request):
         try:
             logger.info(f"Manual NAV computation triggered by admin {request.user.email}")
-            engine = ValuationEngine(MultiSourceOracle())
-            result = engine.calculate_daily_nav()
+            snapshot_result = take_vault_snapshot()
+            nav_result = publish_daily_nav()
             
             return Response({
                 "message": "NAV calculated successfully.",
-                "nav_inr": float(result.nav_inr),
-                "nav_usd": float(result.nav_usd),
-                "date": str(result.nav_date),
+                "nav_inr": nav_result.get("nav_inr"),
+                "nav_usd": nav_result.get("nav_usd"),
+                "date": nav_result.get("date"),
             })
         except Exception as e:
             logger.exception("Manual NAV computation failed.")

@@ -25,7 +25,7 @@ function TabButton({ active, icon: Icon, label, onClick }) {
 
 function SectionCard({ title, children }) {
   return (
-    <div className="bg-white dark:glass-container border border-black/5 dark:border-0 rounded-[24px] p-6 mb-6 shadow-sm dark:shadow-none transition-colors duration-300">
+    <div className="glassContainer border border-black/5 dark:border-white/5 rounded-[24px] p-6 mb-6 shadow-sm dark:shadow-none transition-colors duration-300">
       {title && <h2 className="text-sm font-bold text-slate-500 dark:text-slate-300 uppercase tracking-widest mb-6 transition-colors">{title}</h2>}
       {children}
     </div>

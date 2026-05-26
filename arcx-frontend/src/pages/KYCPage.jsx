@@ -101,7 +101,7 @@ export default function KYCPage() {
       </div>
 
       {/* Current status card */}
-      <div className="bg-white dark:bg-[#1C1C1E] border border-black/5 dark:border-white/5 rounded-2xl p-6 mb-6 animate-fade-up shadow-sm dark:shadow-none transition-colors duration-300">
+      <div className="glassContainer border border-black/5 dark:border-white/5 rounded-2xl p-6 mb-6 animate-fade-up shadow-sm dark:shadow-none transition-colors duration-300">
         <div className="flex items-center justify-between">
           <div>
             <div className="text-xs text-slate-500 uppercase tracking-widest mb-1 font-bold">Current Status</div>
@@ -145,7 +145,7 @@ export default function KYCPage() {
 
       {/* Past submissions */}
       {kycData?.records?.length > 0 && (
-        <div className="bg-white dark:bg-[#1C1C1E] border border-black/5 dark:border-white/5 rounded-2xl p-6 mb-6 animate-fade-up delay-100 shadow-sm dark:shadow-none transition-colors duration-300">
+        <div className="glassContainer border border-black/5 dark:border-white/5 rounded-2xl p-6 mb-6 animate-fade-up delay-100 shadow-sm dark:shadow-none transition-colors duration-300">
           <h2 className="text-xs font-bold text-slate-500 uppercase tracking-widest mb-4">Submission History</h2>
           <div className="space-y-2">
             {kycData.records.map(r => (
@@ -164,7 +164,7 @@ export default function KYCPage() {
 
       {/* KYC Wizard */}
       {step < 3 && (
-        <div className="bg-white dark:bg-[#1C1C1E] border border-black/5 dark:border-white/5 rounded-2xl overflow-hidden animate-fade-up delay-200 shadow-sm dark:shadow-none transition-colors duration-300">
+        <div className="glassContainer border border-black/5 dark:border-white/5 rounded-2xl overflow-hidden animate-fade-up delay-200 shadow-sm dark:shadow-none transition-colors duration-300">
 
           {/* Step indicator */}
           <div className="flex border-b border-black/5 dark:border-white/5 bg-slate-50 dark:bg-black/20 transition-colors">
@@ -287,7 +287,7 @@ export default function KYCPage() {
 
       {/* Step 3: Success */}
       {step === 3 && (
-        <div className="bg-white dark:bg-[#1C1C1E] border border-emerald-200 dark:border-emerald-500/20 rounded-2xl p-8 text-center animate-fade-up shadow-sm dark:shadow-none transition-colors duration-300">
+        <div className="glassContainer border border-emerald-200 dark:border-emerald-500/20 rounded-2xl p-8 text-center animate-fade-up shadow-sm dark:shadow-none transition-colors duration-300">
           <CheckCircle size={48} className="text-emerald-500 mx-auto mb-5" />
           <h3 className="font-display font-bold text-2xl text-[#1D1D1F] dark:text-[#F5F5F7] mb-2 transition-colors">Verification Complete</h3>
           <p className="text-sm font-medium text-slate-500 dark:text-slate-400 mb-8 transition-colors">

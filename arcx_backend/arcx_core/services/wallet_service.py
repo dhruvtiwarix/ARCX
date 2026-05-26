@@ -136,7 +136,16 @@ class WalletService:
     @log_operation("withdraw")
     def withdraw(self, user_id: str, amount_arcx: Decimal) -> Transaction:
         """
-        Convert ARCX to INR and debit wallet.
+        Convert ARCX to INR and debit wallet — Instant Route A with Liquidity Fee.
+
+        Fee Policy:
+          Rate : 0.1% of gross INR payout
+          Cap  : $100 USD equivalent (live rate from oracle)
+          Effect: Large withdrawals never pay more than ~₹8,300 (at $1=₹83).
+                  Small withdrawals pay fractions of a rupee.
+
+        This fee builds the ARCX treasury's instant-liquidity buffer,
+        funding future payouts without bleeding the 10% cash reserve.
         Logs WITHDRAW_COMPLETED or WITHDRAW_FAILED.
         """
         op_start = time.monotonic()
@@ -172,6 +181,19 @@ class WalletService:
                 else:
                     cost_basis_reduction = Decimal("0")
 
+                # ── Instant Liquidity Fee (Route A) ──────────────────────────
+                # Fee = 0.1% of gross INR value.
+                # Cap = $100 USD equivalent (dynamic, uses live oracle rate).
+                # This keeps the fee fair for small and large withdrawals alike:
+                #   ₹10,000 withdrawal  → fee = ₹10
+                #   ₹1,00,00,000 (1 Cr) → fee = ₹8,300 (capped at $100 @ ₹83/$)
+                FEE_RATE    = Decimal("0.001")   # 0.1%
+                FEE_CAP_USD = Decimal("100")     # $100 hard cap
+                fee_cap_inr = (FEE_CAP_USD * Decimal(str(prices.usd_inr))).quantize(Decimal("0.0001"))
+                raw_fee     = (inr_to_return * FEE_RATE).quantize(Decimal("0.0001"))
+                fee_inr     = min(raw_fee, fee_cap_inr)
+                net_inr     = (inr_to_return - fee_inr).quantize(Decimal("0.0001"))
+
                 wallet.arcx_balance   -= amount_arcx
                 wallet.cost_basis_inr -= cost_basis_reduction
                 wallet.save(update_fields=["arcx_balance", "cost_basis_inr", "updated_at"])
@@ -181,7 +203,8 @@ class WalletService:
                     idempotency_key = uuid.uuid4(),
                     tx_type         = Transaction.TxType.WITHDRAW,
                     amount_arcx     = amount_arcx,
-                    amount_inr      = inr_to_return,
+                    amount_inr      = net_inr,    # Net payout after fee
+                    fee_inr         = fee_inr,    # Fee retained by treasury
                     nav_at_tx       = nav_inr,
                     status          = Transaction.Status.COMPLETED,
                 )
@@ -190,7 +213,7 @@ class WalletService:
             arcx_logger.withdraw_completed(
                 user_id      = user_id,
                 amount_arcx  = amount_arcx,
-                inr_returned = inr_to_return,
+                inr_returned = net_inr,
                 nav_inr      = nav_inr,
                 tx_id        = str(tx.id),
                 duration_ms  = duration_ms,

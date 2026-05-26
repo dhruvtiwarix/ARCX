@@ -108,8 +108,10 @@ class TransactionResponseSerializer(serializers.ModelSerializer):
             "tx_type",
             "amount_arcx",
             "amount_inr",
+            "fee_inr",
             "nav_at_tx",
             "status",
+            "settlement_date",
             "created_at",
         ]
 
