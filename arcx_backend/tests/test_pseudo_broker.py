@@ -89,24 +89,30 @@ class TestPseudoBrokerService(TestCase):
         # Average buy price does NOT change on sell!
         self.assertEqual(self.gld.average_buy_price, Decimal("200.0000"))
 
-    def test_insufficient_cash_rolls_back_entire_transaction(self):
-        """If we try to buy more than cash available, the whole batch fails."""
-        # Instruction: Buy $12,000 of SPY (we only have $10,000)
+    def test_insufficient_cash_results_in_partial_fill(self):
+        """If we try to buy more than cash available, it should partially fill."""
+        # Instruction: Buy $200 of GLD (we have $10,000)
+        # Instruction: Buy $12,000 of SPY (we only have $9,800 left)
         trades = [
-            RebalanceTrade(action="BUY", ticker="GLD", share_quantity=1.0, execution_price=200.0, dollar_amount=200.0, reason="test"), # This would succeed
-            RebalanceTrade(action="BUY", ticker="SPY", share_quantity=24.0, execution_price=500.0, dollar_amount=12000.0, reason="test"), # This fails
+            RebalanceTrade(action="BUY", ticker="GLD", share_quantity=1.0, execution_price=200.0, dollar_amount=200.0, reason="test"),
+            RebalanceTrade(action="BUY", ticker="SPY", share_quantity=24.0, execution_price=500.0, dollar_amount=12000.0, reason="test"),
         ]
 
-        with self.assertRaises(ValueError) as context:
-            self.broker.execute_trades(trades, self.snapshot)
-
-        self.assertIn("Insufficient cash", str(context.exception))
+        result = self.broker.execute_trades(trades, self.snapshot)
 
         self.snapshot.refresh_from_db()
         self.gld.refresh_from_db()
         self.spy.refresh_from_db()
 
-        # Due to atomic transaction, the $200 GLD buy should have been rolled back
-        self.assertEqual(self.snapshot.cash_value_usd, Decimal("10000.00"))
-        self.assertEqual(self.gld.total_quantity, Decimal("0"))
-        self.assertEqual(self.spy.total_quantity, Decimal("0"))
+        # GLD should be fully filled ($200)
+        self.assertEqual(self.gld.total_quantity, Decimal("1.0"))
+        
+        # SPY should be partially filled with the remaining $9,800
+        # $9,800 / $500 = 19.6 shares
+        self.assertEqual(self.spy.total_quantity, Decimal("19.6"))
+        
+        # Cash should be completely exhausted (or close to 0)
+        self.assertEqual(self.snapshot.cash_value_usd, Decimal("0.0000"))
+        
+        # All orders should be marked as successful (partial fill is success)
+        self.assertEqual(result.successful_trades, 2)
