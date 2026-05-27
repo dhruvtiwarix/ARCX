@@ -43,7 +43,7 @@ def job_take_vault_snapshot():
     from django.db import transaction, IntegrityError
     from domain.oracle import MultiSourceOracle, OracleFailureException
     from domain.valuation import ValuationEngine
-    from arcx_core.models import VaultSnapshot
+    from arcx_core.models import VaultSnapshot, VaultAssetHolding
     from arcx_core.logger import arcx_logger
 
     log = logging.getLogger("arcx.scheduler.snapshot")
@@ -63,14 +63,17 @@ def job_take_vault_snapshot():
 
     try:
         prev = VaultSnapshot.objects.exclude(snapshot_date=today).latest("snapshot_date")
+        # Phase 6: load actual share quantities from the holdings ledger
+        holdings = list(VaultAssetHolding.objects.all())
         engine = ValuationEngine(
-            arcx_supply=float(prev.arcx_supply),
-            vault_value_usd=float(prev.total_value_usd),
+            arcx_supply      = float(prev.arcx_supply),
+            cash_balance_usd = float(prev.cash_value_usd),
         )
     except VaultSnapshot.DoesNotExist:
+        holdings = []
         engine = ValuationEngine.from_genesis(prices)
 
-    state = engine.calculate_nav(prices)
+    state = engine.calculate_nav(holdings, prices)
 
     try:
         VaultSnapshot.objects.create(
@@ -103,7 +106,7 @@ def job_publish_daily_nav():
     from domain.dividend import DividendAccrualEngine
     from domain.rebalancer import DriftRebalancer
     from domain.nav_report import NAVReportGenerator
-    from arcx_core.models import VaultSnapshot, NAVHistory
+    from arcx_core.models import VaultSnapshot, NAVHistory, VaultAssetHolding
     from arcx_core.logger import arcx_logger
 
     log = logging.getLogger("arcx.scheduler.nav")
@@ -127,26 +130,37 @@ def job_publish_daily_nav():
         log.error("[Scheduler] Oracle failure on NAV publish: %s", e)
         return
 
-    engine  = ValuationEngine(
-        arcx_supply=float(snapshot.arcx_supply),
-        vault_value_usd=float(snapshot.total_value_usd),
+    # Phase 6: load actual holdings for Mark-to-Market valuation
+    holdings = list(VaultAssetHolding.objects.all())
+    engine   = ValuationEngine(
+        arcx_supply      = float(snapshot.arcx_supply),
+        cash_balance_usd = float(snapshot.cash_value_usd),
     )
-    state   = engine.calculate_nav(prices)
+    state = engine.calculate_nav(holdings, prices)
 
     accrual_engine = DividendAccrualEngine()
     accrual = accrual_engine.accrue_daily_yield(
-        vault_value_usd=float(snapshot.total_value_usd),
-        arcx_supply=float(snapshot.arcx_supply),
-        prices=prices,
+        vault_value_usd = float(snapshot.total_value_usd),
+        arcx_supply     = float(snapshot.arcx_supply),
+        prices          = prices,
     )
+
+    # Phase 6: build holdings dict for rebalancer
+    live_prices_dict = {"SPY": float(prices.spy), "TLT": float(prices.tlt), "GLD": float(prices.gld)}
+    holdings_dict = {}
+    for h in holdings:
+        qty = float(h.total_quantity)
+        holdings_dict[h.asset_ticker] = {
+            "value": qty * live_prices_dict.get(h.asset_ticker, 0),
+            "qty":   qty,
+        }
 
     rebalancer   = DriftRebalancer()
     rebal_report = rebalancer.analyze(
-        vault_value_usd=state.total_vault_value_usd,
-        stock_value_usd=state.stock_value_usd,
-        bond_value_usd=state.bond_value_usd,
-        gold_value_usd=state.gold_value_usd,
-        cash_value_usd=state.cash_value_usd,
+        vault_value_usd  = float(state.total_vault_value_usd),
+        holdings         = holdings_dict,
+        cash_balance_usd = float(state.cash_balance_usd),
+        live_prices      = live_prices_dict,
     )
 
     reporter    = NAVReportGenerator()

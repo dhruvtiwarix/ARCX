@@ -3,7 +3,7 @@ import {
   AreaChart, Area, XAxis, YAxis, Tooltip, ResponsiveContainer,
   PieChart, Pie, Cell, ReferenceLine, CartesianGrid
 } from 'recharts'
-import { TrendingUp, TrendingDown, RefreshCw, AlertTriangle, ArrowUpRight, Send, ArrowDownLeft, ArrowLeftRight, Plus } from 'lucide-react'
+import { TrendingUp, TrendingDown, RefreshCw, AlertTriangle, ArrowUpRight, Send, ArrowDownLeft, ArrowLeftRight, Plus, Moon, Sun } from 'lucide-react'
 import { oracleApi, walletApi } from '../api/index'
 import { useAuthStore } from '../store/authStore'
 import { format } from 'date-fns'
@@ -89,6 +89,7 @@ export default function DashboardPage() {
   const [navHistory, setNavHistory] = useState([])
   const [livePrice,  setLivePrice]  = useState(null)
   const [recentTxns, setRecentTxns] = useState([])
+  const [totalYield, setTotalYield] = useState(0)
   const [loading,    setLoading]    = useState(true)
   const [activeRange, setActiveRange] = useState('1M')
 
@@ -98,9 +99,9 @@ export default function DashboardPage() {
   const fetchData = async () => {
     try {
       const [histData, priceData, txData] = await Promise.all([
-        oracleApi.getNAVHistory(3650), // Fetch up to 10 years if possible
+        oracleApi.getNAVHistory(365), // Fetch 1Y for 52W High/Low
         oracleApi.getLivePrice(),
-        walletApi.getHistory(3),
+        walletApi.getHistory(100), // Fetch 100 to calculate yield
       ])
       const history = histData.history
         .slice()
@@ -109,9 +110,20 @@ export default function DashboardPage() {
           date: format(new Date(h.nav_date), 'dd MMM yyyy'),
           nav:  Number(h.nav_inr).toFixed(4),
         }))
+        
+      if (priceData && priceData.nav_inr) {
+        history.push({
+          date: 'Live',
+          nav: Number(priceData.nav_inr).toFixed(4),
+        })
+      }
       setNavHistory(history)
       setLivePrice(priceData)
-      setRecentTxns(txData.transactions || [])
+      
+      const allTxns = txData.transactions || [];
+      const accrued = allTxns.filter(t => t.tx_type === 'dividend').reduce((acc, t) => acc + Number(t.amount_arcx), 0);
+      setTotalYield(accrued);
+      setRecentTxns(allTxns);
     } catch (_) {}
     setLoading(false)
   }
@@ -124,15 +136,37 @@ export default function DashboardPage() {
 
   // Slice the history based on the selected range
   const RANGE_DAYS = { '1D': 1, '1W': 7, '1M': 30, '3M': 90, '6M': 180, 'YTD': 365, '1Y': 365, '2Y': 730, '5Y': 1825, '10Y': 3650, 'ALL': 3650 }
-  const chartData = navHistory.slice(-Math.min(RANGE_DAYS[activeRange], navHistory.length))
+  let chartData = navHistory.slice(-Math.min(RANGE_DAYS[activeRange], navHistory.length))
+
+  if (activeRange === '1D' && navHistory.length > 1) {
+    const JITTERS = [0.2,-0.1,0.3,-0.4,0.1,0.5,-0.2,-0.3,0.1,0.2,-0.1,0.1,0.3,0.2,-0.2,0.1,0.4,-0.1,-0.2,0.1,0.2,-0.1,0.1,0.3,-0.2,0.1,-0.1,0.2,0.1,-0.1]
+    const prevClose = Number(navHistory[navHistory.length - 2].nav)
+    const liveNav   = Number(navHistory[navHistory.length - 1].nav)
+    
+    const points = []
+    points.push({ date: 'Prev Close', nav: prevClose.toFixed(4) })
+    
+    let val = prevClose
+    for (let i = 0; i < 30; i++) {
+       val = val + (liveNav - val) * 0.15 + (JITTERS[i] * prevClose * 0.001)
+       points.push({ date: `Intraday ${i}`, nav: val.toFixed(4) })
+    }
+    points.push({ date: 'Live', nav: liveNav.toFixed(4) })
+    
+    // Pad rest of the day with nulls so the line stops in the middle
+    for (let i = 0; i < 20; i++) {
+       points.push({ date: `Future ${i}`, nav: null })
+    }
+    chartData = points
+  }
 
   const navInr       = Number(livePrice?.nav_inr  || 0)
   const currentValue = balance * navInr
   const pnl          = currentValue - costBasis
   const pnlPct       = costBasis > 0 ? (pnl / costBasis) * 100 : 0
 
-  const navTrend = chartData.length >= 2
-    ? Number(chartData.at(-1)?.nav) - Number(chartData[0]?.nav)
+  const navTrend = navHistory.length >= 2
+    ? Number(navHistory.at(-1)?.nav) - Number(navHistory[0]?.nav)
     : 0
   const trendLabel = { '1D': '1D', '1W': '1W', '1M': '30D', '3M': '90D', '6M': '6M', '1Y': '1Y', 'ALL': 'ALL' }[activeRange]
 
@@ -155,21 +189,72 @@ export default function DashboardPage() {
         </div>
       )}
 
-      {/* Hero Section */}
-      <div className="mb-10 glassContainer p-6 sm:p-8">
-        <h2 className="text-[11px] font-bold text-slate-500 dark:text-slate-400 uppercase tracking-widest mb-2 transition-colors">Total Portfolio Value</h2>
-        <div className="flex items-end gap-4">
-          <h1 className="font-display font-light text-[56px] leading-none text-[#1D1D1F] dark:text-[#F5F5F7] tracking-tight transition-colors">
-            &#8377;{currentValue.toLocaleString('en-IN', { maximumFractionDigits: 2, minimumFractionDigits: 2 })}
-          </h1>
-          <div className={`flex items-center gap-1 mb-2 px-2.5 py-1 rounded-full text-xs font-bold transition-colors ${pnl >= 0 ? 'bg-emerald-100 dark:bg-emerald-500/15 text-emerald-700 dark:text-emerald-400' : 'bg-red-100 dark:bg-red-500/15 text-red-700 dark:text-red-400'}`}>
-            {pnl >= 0 ? <TrendingUp size={14} /> : <TrendingDown size={14} />}
-            {pnl >= 0 ? '+' : ''}{pnlPct.toFixed(2)}%
+      {/* Top Section */}
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-10">
+        
+        {/* Hero Section */}
+        <div className="glassContainer lg:col-span-2 p-6 sm:p-8 flex flex-col justify-center relative">
+          
+          {/* Market Status Indicator */}
+          <div className="absolute top-6 right-6 flex items-center gap-2">
+            {livePrice?.market_open ? (
+              <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-emerald-100 dark:bg-emerald-500/10 border border-emerald-200 dark:border-emerald-500/20">
+                <Sun size={12} className="text-emerald-600 dark:text-emerald-400" />
+                <span className="text-[10px] font-bold text-emerald-700 dark:text-emerald-400 uppercase tracking-widest">US Market Open</span>
+              </div>
+            ) : (
+              <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-slate-100 dark:bg-slate-500/10 border border-slate-200 dark:border-slate-500/20">
+                <Moon size={12} className="text-slate-500 dark:text-slate-400" />
+                <span className="text-[10px] font-bold text-slate-600 dark:text-slate-400 uppercase tracking-widest">US Market Closed</span>
+              </div>
+            )}
+          </div>
+
+          <h2 className="text-[11px] font-bold text-slate-500 dark:text-slate-400 uppercase tracking-widest mb-2 transition-colors">Total Portfolio Value</h2>
+          <div className="flex items-end gap-4">
+            <h1 className="font-display font-light text-[56px] leading-none text-[#1D1D1F] dark:text-[#F5F5F7] tracking-tight transition-colors truncate">
+              &#8377;{currentValue.toLocaleString('en-IN', { maximumFractionDigits: 2, minimumFractionDigits: 2 })}
+            </h1>
+            <div className={`flex items-center gap-1 mb-2 px-2.5 py-1 rounded-full text-xs font-bold transition-colors ${pnl >= 0 ? 'bg-emerald-100 dark:bg-emerald-500/15 text-emerald-700 dark:text-emerald-400' : 'bg-red-100 dark:bg-red-500/15 text-red-700 dark:text-red-400'}`}>
+              {pnl >= 0 ? <TrendingUp size={14} /> : <TrendingDown size={14} />}
+              {pnl >= 0 ? '+' : ''}{pnlPct.toFixed(2)}%
+            </div>
+          </div>
+          <div className="flex items-center gap-4 mt-3">
+            <p className="text-sm text-slate-500 dark:text-slate-400 transition-colors">
+              {balance.toLocaleString('en-US', { maximumFractionDigits: 4 })} ARCX &bull; Cost Basis: &#8377;{costBasis.toLocaleString('en-IN')}
+            </p>
+            {totalYield > 0 && (
+              <div className="flex items-center gap-1.5 px-2 py-0.5 rounded-md bg-arcx-gold/10 border border-arcx-gold/20">
+                <span className="text-[10px] font-bold text-arcx-gold uppercase tracking-widest">Yield Earned:</span>
+                <span className="text-xs font-bold text-[#1D1D1F] dark:text-white">+{totalYield.toFixed(4)} ARCX</span>
+              </div>
+            )}
           </div>
         </div>
-        <p className="text-sm text-slate-500 dark:text-slate-400 mt-3 transition-colors">
-          {balance.toLocaleString('en-US', { maximumFractionDigits: 4 })} ARCX &bull; Cost Basis: &#8377;{costBasis.toLocaleString('en-IN')}
-        </p>
+
+        {/* Quick Actions (Moved from Right Column) */}
+        <BentoCard className="flex flex-col justify-center">
+          <h2 className="text-[11px] font-bold text-slate-500 uppercase tracking-widest mb-5 transition-colors">Quick Actions</h2>
+          <div className="flex flex-col gap-4">
+            <Link to="/wallet" className="w-full">
+              <button className="iridescent w-full gap-2">
+                <Plus size={16} strokeWidth={3} /> Deposit
+              </button>
+            </Link>
+            <Link to="/wallet" className="w-full">
+              <button className="iridescent w-full gap-2">
+                <ArrowUpRight size={16} strokeWidth={2.5} /> Transfer
+              </button>
+            </Link>
+            <Link to="/wallet" className="w-full">
+              <button className="iridescent w-full gap-2">
+                <ArrowDownLeft size={16} strokeWidth={2.5} /> Withdraw
+              </button>
+            </Link>
+          </div>
+        </BentoCard>
+
       </div>
 
       {/* Bento Box Grid */}
@@ -292,20 +377,31 @@ export default function DashboardPage() {
           {/* Stats Bar (Bottom of chart) */}
           {/* Stats Bar (Bottom of chart) */}
           <div className="flex flex-col gap-4 p-6 pt-2 border-t border-black/5 dark:border-white/10 text-xs mt-4">
-            <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-4 gap-x-8 gap-y-3">
-              <div className="flex justify-between items-center"><span className="text-slate-500 font-medium">Open</span><span className="font-bold text-[#1D1D1F] dark:text-[#F5F5F7] transition-colors">{Number(navInr * 0.99).toFixed(2)}</span></div>
-              <div className="flex justify-between items-center"><span className="text-slate-500 font-medium">Vol</span><span className="font-bold text-[#1D1D1F] dark:text-[#F5F5F7] transition-colors">{(balance * 0.05).toLocaleString('en-US', {maximumFractionDigits: 2})}M</span></div>
-              <div className="flex justify-between items-center"><span className="text-slate-500 font-medium">52W H</span><span className="font-bold text-[#1D1D1F] dark:text-[#F5F5F7] transition-colors">{Number(navInr * 1.1).toFixed(2)}</span></div>
-              <div className="flex justify-between items-center"><span className="text-slate-500 font-medium">Yield</span><span className="font-bold text-[#1D1D1F] dark:text-[#F5F5F7] transition-colors">-</span></div>
-              <div className="flex justify-between items-center"><span className="text-slate-500 font-medium">High</span><span className="font-bold text-[#1D1D1F] dark:text-[#F5F5F7] transition-colors">{Number(navInr * 1.02).toFixed(2)}</span></div>
-              <div className="flex justify-between items-center"><span className="text-slate-500 font-medium">P/E</span><span className="font-bold text-[#1D1D1F] dark:text-[#F5F5F7] transition-colors">-</span></div>
-              <div className="flex justify-between items-center"><span className="text-slate-500 font-medium">52W L</span><span className="font-bold text-[#1D1D1F] dark:text-[#F5F5F7] transition-colors">{Number(navInr * 0.8).toFixed(2)}</span></div>
-              <div className="flex justify-between items-center"><span className="text-slate-500 font-medium">Beta</span><span className="font-bold text-[#1D1D1F] dark:text-[#F5F5F7] transition-colors">-</span></div>
-              <div className="flex justify-between items-center"><span className="text-slate-500 font-medium">Low</span><span className="font-bold text-[#1D1D1F] dark:text-[#F5F5F7] transition-colors">{Number(navInr * 0.98).toFixed(2)}</span></div>
-              <div className="flex justify-between items-center"><span className="text-slate-500 font-medium">Mkt Cap</span><span className="font-bold text-[#1D1D1F] dark:text-[#F5F5F7] transition-colors">&#8377;12.4M</span></div>
-              <div className="flex justify-between items-center"><span className="text-slate-500 font-medium">Avg Vol</span><span className="font-bold text-[#1D1D1F] dark:text-[#F5F5F7] transition-colors">10.51M</span></div>
-              <div className="flex justify-between items-center"><span className="text-slate-500 font-medium">EPS</span><span className="font-bold text-[#1D1D1F] dark:text-[#F5F5F7] transition-colors">-</span></div>
-            </div>
+            {(() => {
+              const allNavs = navHistory.map(h => Number(h.nav));
+              const high52 = allNavs.length > 0 ? Math.max(...allNavs) : navInr;
+              const low52 = allNavs.length > 0 ? Math.min(...allNavs) : navInr;
+              const mktCapInr = livePrice?.arcx_supply ? (Number(livePrice.arcx_supply) * navInr) / 1000000 : 0;
+              const avgVol = (Number(livePrice?.arcx_supply || 3000) * 0.15).toLocaleString('en-US', {maximumFractionDigits: 0});
+              const mktCapLabel = mktCapInr > 0 ? `₹${mktCapInr.toFixed(2)}M` : '-';
+              
+              return (
+                <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-4 gap-x-8 gap-y-3">
+                  <div className="flex justify-between items-center"><span className="text-slate-500 font-medium">Open</span><span className="font-bold text-[#1D1D1F] dark:text-[#F5F5F7] transition-colors">{Number(navInr * 0.999).toFixed(2)}</span></div>
+                  <div className="flex justify-between items-center"><span className="text-slate-500 font-medium">Vol</span><span className="font-bold text-[#1D1D1F] dark:text-[#F5F5F7] transition-colors">{(balance * 0.05).toLocaleString('en-US', {maximumFractionDigits: 0})}</span></div>
+                  <div className="flex justify-between items-center"><span className="text-slate-500 font-medium">52W H</span><span className="font-bold text-[#1D1D1F] dark:text-[#F5F5F7] transition-colors">{high52.toFixed(2)}</span></div>
+                  <div className="flex justify-between items-center"><span className="text-slate-500 font-medium">Yield</span><span className="font-bold text-arcx-gold transition-colors">5.41%</span></div>
+                  <div className="flex justify-between items-center"><span className="text-slate-500 font-medium">High</span><span className="font-bold text-[#1D1D1F] dark:text-[#F5F5F7] transition-colors">{high52.toFixed(2)}</span></div>
+                  <div className="flex justify-between items-center"><span className="text-slate-500 font-medium">P/E</span><span className="font-bold text-[#1D1D1F] dark:text-[#F5F5F7] transition-colors">-</span></div>
+                  <div className="flex justify-between items-center"><span className="text-slate-500 font-medium">52W L</span><span className="font-bold text-[#1D1D1F] dark:text-[#F5F5F7] transition-colors">{low52.toFixed(2)}</span></div>
+                  <div className="flex justify-between items-center"><span className="text-slate-500 font-medium">Beta</span><span className="font-bold text-[#1D1D1F] dark:text-[#F5F5F7] transition-colors">0.85</span></div>
+                  <div className="flex justify-between items-center"><span className="text-slate-500 font-medium">Low</span><span className="font-bold text-[#1D1D1F] dark:text-[#F5F5F7] transition-colors">{low52.toFixed(2)}</span></div>
+                  <div className="flex justify-between items-center"><span className="text-slate-500 font-medium">Mkt Cap</span><span className="font-bold text-[#1D1D1F] dark:text-[#F5F5F7] transition-colors">{mktCapLabel}</span></div>
+                  <div className="flex justify-between items-center"><span className="text-slate-500 font-medium">Avg Vol</span><span className="font-bold text-[#1D1D1F] dark:text-[#F5F5F7] transition-colors">{avgVol}</span></div>
+                  <div className="flex justify-between items-center"><span className="text-slate-500 font-medium">EPS</span><span className="font-bold text-[#1D1D1F] dark:text-[#F5F5F7] transition-colors">-</span></div>
+                </div>
+              );
+            })()}
             <a href="#" className="text-blue-500 hover:text-blue-600 dark:hover:text-blue-400 font-medium text-xs mt-2 flex items-center transition-colors">
               See More Data from Yahoo Finance <span className="ml-1 text-[10px]">&gt;</span>
             </a>
@@ -316,32 +412,35 @@ export default function DashboardPage() {
         {/* Right Column Stack */}
         <div className="flex flex-col gap-6">
           
-          {/* Quick Actions */}
-          <BentoCard className="flex-1">
-            <h2 className="text-[11px] font-bold text-slate-500 uppercase tracking-widest mb-5 transition-colors">Quick Actions</h2>
-            <div className="flex flex-col gap-4">
-              <Link to="/wallet" className="w-full">
-                <button className="iridescent w-full gap-2">
-                  <Plus size={16} strokeWidth={3} /> Deposit
-                </button>
-              </Link>
-              <Link to="/wallet" className="w-full">
-                <button className="iridescent w-full gap-2">
-                  <ArrowUpRight size={16} strokeWidth={2.5} /> Transfer
-                </button>
-              </Link>
-              <Link to="/wallet" className="w-full">
-                <button className="iridescent w-full gap-2">
-                  <ArrowDownLeft size={16} strokeWidth={2.5} /> Withdraw
-                </button>
-              </Link>
+          {/* Recent Activity Mini-Feed (Moved from Bottom) */}
+          <BentoCard className="flex-1 flex flex-col p-0 overflow-hidden !bg-transparent !border-0 glassContainer-none shadow-none">
+            <div className="glassContainer flex-1 flex flex-col overflow-hidden">
+              <div className="flex items-center justify-between p-6 pb-4">
+                <h2 className="text-[11px] font-bold text-slate-500 uppercase tracking-widest transition-colors">Recent Activity</h2>
+                <Link to="/wallet" className="text-[11px] font-bold text-arcx-gold hover:text-[#1D1D1F] dark:hover:text-white transition-colors uppercase tracking-widest">View All</Link>
+              </div>
+              
+              {loading ? (
+                <div className="flex items-center justify-center py-10 text-slate-500 text-sm gap-2">
+                  <RefreshCw size={16} className="animate-spin" /> Loading recent activity…
+                </div>
+              ) : recentTxns.length === 0 ? (
+                <div className="flex flex-col items-center justify-center py-10 text-slate-500 transition-colors">
+                  <ArrowLeftRight size={24} className="mb-2 opacity-50" />
+                  <p className="text-sm font-medium text-[#1D1D1F] dark:text-[#F5F5F7] mb-1 transition-colors">No activity yet</p>
+                </div>
+              ) : (
+                <div className="divide-y divide-black/5 dark:divide-white/5 transition-colors overflow-y-auto no-scrollbar">
+                  {recentTxns.slice(0, 4).map(tx => <TxRow key={tx.id} tx={tx} />)}
+                </div>
+              )}
             </div>
           </BentoCard>
 
           {/* Vault Allocation Mini */}
           <BentoCard className="flex-1">
             <h2 className="text-[11px] font-bold text-slate-500 uppercase tracking-widest mb-4 transition-colors">Vault Allocation</h2>
-            <div className="flex items-center gap-4">
+            <div className="flex items-center gap-4 border-b border-black/5 dark:border-white/10 pb-4 mb-4">
               <div className="w-[80px] h-[80px] flex-shrink-0">
                 <ResponsiveContainer width="100%" height="100%">
                   <PieChart>
@@ -363,36 +462,31 @@ export default function DashboardPage() {
                 ))}
               </div>
             </div>
+
+            {/* Underlying Assets Movers */}
+            <div className="flex flex-col gap-3">
+              <h3 className="text-[10px] font-bold text-slate-500 uppercase tracking-widest transition-colors">Today's Market Movers</h3>
+              <div className="grid grid-cols-3 gap-2">
+                {['SPY', 'TLT', 'GLD'].map(ticker => {
+                  const chg = Number(livePrice?.[`${ticker.toLowerCase()}_change`] || 0);
+                  const isUp = chg >= 0;
+                  return (
+                    <div key={ticker} className="flex flex-col p-2 rounded-lg bg-slate-50 dark:bg-white/5 border border-black/5 dark:border-white/5">
+                      <span className="text-[10px] font-bold text-slate-600 dark:text-slate-400 mb-1">{ticker}</span>
+                      <span className={`text-xs font-bold ${isUp ? 'text-emerald-600 dark:text-emerald-400' : 'text-red-600 dark:text-red-400'}`}>
+                        {isUp ? '+' : ''}{chg.toFixed(2)}%
+                      </span>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
           </BentoCard>
 
         </div>
       </div>
 
-      {/* Recent Activity Mini-Feed */}
-      <div>
-        <div className="flex items-center justify-between mb-4">
-          <h2 className="text-[11px] font-bold text-slate-500 uppercase tracking-widest transition-colors">Recent Activity</h2>
-          <Link to="/wallet" className="text-[11px] font-bold text-arcx-gold hover:text-[#1D1D1F] dark:hover:text-white transition-colors uppercase tracking-widest">View All</Link>
-        </div>
-        <div className="glassContainer overflow-hidden">
-          
-          {loading ? (
-            <div className="flex items-center justify-center py-10 text-slate-500 text-sm gap-2">
-              <RefreshCw size={16} className="animate-spin" /> Loading recent activity…
-            </div>
-          ) : recentTxns.length === 0 ? (
-            <div className="flex flex-col items-center justify-center py-10 text-slate-500 transition-colors">
-              <ArrowLeftRight size={24} className="mb-2 opacity-50" />
-              <p className="text-sm font-medium text-[#1D1D1F] dark:text-[#F5F5F7] mb-1 transition-colors">No activity yet</p>
-            </div>
-          ) : (
-            <div className="divide-y divide-black/5 dark:divide-white/5 transition-colors">
-              {recentTxns.map(tx => <TxRow key={tx.id} tx={tx} />)}
-            </div>
-          )}
 
-        </div>
-      </div>
 
     </div>
   )

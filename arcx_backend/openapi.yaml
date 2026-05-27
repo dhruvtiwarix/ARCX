@@ -1,0 +1,1741 @@
+openapi: 3.0.3
+info:
+  title: ARCX Platform API
+  version: 1.0.0
+  description: |-
+    ## ARCX — Algorithmic Reserve Currency Exchange
+
+    ARCX is an INR-denominated, NAV-backed digital asset platform. Investors deposit INR which is converted to ARCX tokens at the current NAV price. The vault holds a diversified portfolio (SPY, TLT, GLD) rebalanced algorithmically.
+
+    ### Authentication
+    All protected endpoints require a **Bearer JWT** in the `Authorization` header:
+    ```
+    Authorization: Bearer <access_token>
+    ```
+
+    Obtain tokens via `POST /api/auth/token/` or `POST /api/v1/auth/register`.
+
+    ### Idempotency
+    Financial mutation endpoints (deposit, withdraw, transfer) require an `Idempotency-Key` UUID header to prevent duplicate transactions.
+
+    ### Error Format
+    All errors follow: `{"error": "message", "code": "SNAKE_CASE_CODE"}`
+  contact:
+    name: ARCX Engineering
+    email: engineering@arcx.in
+  license:
+    name: Proprietary
+paths:
+  /api/v1/auth/register:
+    post:
+      operationId: auth_register
+      description: |-
+        Creates a new ARCX user account and immediately returns JWT tokens so the user is logged in on the same request — no separate login step required.
+
+        **KYC Note:** New accounts start with `kyc_status=pending`. Deposit, withdraw, and transfer all require KYC approval.
+      summary: Register a new account
+      tags:
+      - Auth
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RegisterRequestRequest'
+            examples:
+              TypicalRegistration:
+                value:
+                  email: rahul@example.com
+                  password: MyStr0ng#Pass
+                  full_name: Rahul Sharma
+                  phone: +91 98765 43210
+                summary: Typical registration
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/RegisterRequestRequest'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/RegisterRequestRequest'
+        required: true
+      responses:
+        '201':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RegisterResponse'
+          description: ''
+        '409':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              examples:
+                EmailConflict:
+                  value:
+                    error: An account with this email already exists.
+                    code: REGISTRATION_FAILED
+                  summary: Email conflict
+          description: Email already registered
+        '400':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+          description: Validation error — check field format
+  /api/v1/auth/me:
+    get:
+      operationId: auth_me
+      description: Returns the authenticated user's full profile, including wallet
+        balance and KYC tier. One call gives everything the dashboard home screen
+        needs.
+      summary: Get current user profile
+      tags:
+      - Auth
+      security:
+      - jwtAuth: []
+      - BearerAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UserProfile'
+          description: ''
+        '401':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+          description: Missing or invalid JWT
+  /api/v1/auth/logout:
+    post:
+      operationId: auth_logout
+      description: Blacklists the provided refresh token so it can't mint new access
+        tokens. The current access token still works until its 30-minute TTL expires
+        — this is by design with stateless JWT architecture.
+      summary: Logout (blacklist refresh token)
+      tags:
+      - Auth
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/LogoutRequestRequest'
+            examples:
+              LogoutRequest:
+                value:
+                  refresh_token: eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...
+                summary: Logout request
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/LogoutRequestRequest'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/LogoutRequestRequest'
+        required: true
+      security:
+      - jwtAuth: []
+      - BearerAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/LogoutSuccess'
+          description: ''
+        '400':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+          description: Invalid or already-blacklisted token
+        '401':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+          description: Missing or invalid JWT
+  /api/v1/kyc/submit:
+    post:
+      operationId: kyc_submit
+      description: |-
+        Submits a KYC document reference for verification. ARCX stores only the external reference ID returned by the KYC provider (DigiLocker, Onfido, etc.) — never the raw document itself.
+
+        **Tier limits:**
+        - `tier_1` (Aadhaar/DL) → ₹10,000/day
+        - `tier_2` (PAN/Passport) → ₹1,00,000/day
+        - `tier_3` (Full address proof) → Unlimited
+
+        **Demo:** Pass any string as `document_ref` (e.g. `DEMO_REF_001`) to test the flow without a real KYC provider.
+      summary: Submit KYC document for verification
+      tags:
+      - KYC
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/KYCSubmitRequest'
+            examples:
+              Tier1AadhaarSubmission:
+                value:
+                  tier: tier_1
+                  document_type: aadhaar
+                  document_ref: DIGILOCKER_REF_ABC123
+                summary: Tier 1 Aadhaar submission
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/KYCSubmitRequest'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/KYCSubmitRequest'
+        required: true
+      security:
+      - jwtAuth: []
+      - BearerAuth: []
+      responses:
+        '201':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/KYCSubmitResponse'
+              examples:
+                KYCApproved:
+                  value:
+                    kyc_id: 3fa85f64-5717-4562-b3fc-2c963f66afa6
+                    tier: tier_1
+                    status: approved
+                    verified_at: '2025-06-01T15:30:00Z'
+                    message: KYC tier_1 approved. You can now transact up to Rs.10,000/day.
+                  summary: KYC approved
+          description: ''
+        '409':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/KYCErrorResponse'
+              examples:
+                AlreadyApproved:
+                  value:
+                    error: KYC is already approved.
+                    code: KYC_ALREADY_APPROVED
+                  summary: Already approved
+          description: KYC already approved for this user
+        '400':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/KYCErrorResponse'
+          description: Validation error — invalid tier/document_type combination
+        '401':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/KYCErrorResponse'
+          description: JWT missing or expired
+  /api/v1/kyc/status:
+    get:
+      operationId: kyc_status
+      description: Returns the user's current overall KYC status, the highest approved
+        tier, the resulting daily transaction limit, and the full list of all KYC
+        submissions.
+      summary: Get current KYC status and history
+      tags:
+      - KYC
+      security:
+      - jwtAuth: []
+      - BearerAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/KYCStatusResponse'
+              examples:
+                KYCStatusResponse:
+                  value:
+                    kyc_status: approved
+                    highest_tier: tier_1
+                    daily_limit_inr: Rs.10,000
+                    records:
+                    - id: 3fa85f64-5717-4562-b3fc-2c963f66afa6
+                      tier: tier_1
+                      status: approved
+                      document_type: aadhaar
+                      verified_at: '2025-06-01T15:30:00Z'
+                      submitted_at: '2025-06-01T15:29:50Z'
+                  summary: KYC status response
+          description: ''
+        '401':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/KYCErrorResponse'
+          description: JWT missing or expired
+  /api/v1/wallet/:
+    get:
+      operationId: wallet_balance
+      description: "Returns the authenticated user's ARCX token balance, cost basis,
+        and real-time unrealized P&L (calculated using the current oracle NAV). \n\n`unrealized_pnl_inr`
+        may return `null` if the oracle is temporarily unavailable — the balance is
+        always returned."
+      summary: Get wallet balance and P&L
+      tags:
+      - Wallet
+      security:
+      - jwtAuth: []
+      - BearerAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/WalletResponse'
+          description: ''
+        '401':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/WalletErrorResponse'
+          description: JWT missing or expired
+  /api/v1/wallet/deposit:
+    post:
+      operationId: wallet_deposit
+      description: |-
+        Converts INR to ARCX tokens at the current oracle NAV price. Minimum deposit is ₹100. KYC approval is required.
+
+        **Idempotency:** Include a unique `Idempotency-Key` UUID header. Replaying the same key returns the original response without double-charging.
+      summary: Deposit INR -> ARCX
+      parameters:
+      - in: header
+        name: Idempotency-Key
+        schema:
+          type: string
+          format: uuid
+        description: A unique UUID v4 per request. Prevents duplicate transactions
+          on retry.
+        required: true
+      tags:
+      - Wallet
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/DepositRequestRequest'
+            examples:
+              Deposit5000INR:
+                value:
+                  amount_inr: '5000.00'
+                summary: Deposit 5000 INR
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/DepositRequestRequest'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/DepositRequestRequest'
+        required: true
+      security:
+      - jwtAuth: []
+      - BearerAuth: []
+      responses:
+        '201':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DepositResponse'
+              examples:
+                DepositSuccess:
+                  value:
+                    transaction_id: 3fa85f64-5717-4562-b3fc-2c963f66afa6
+                    arcx_credited: '49.123456789012345678'
+                    nav_at_tx: '101.80'
+                    new_balance: '49.123456789012345678'
+                  summary: Deposit success
+          description: ''
+        '400':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/WalletErrorResponse'
+          description: Validation error or oracle failure
+        '403':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/WalletErrorResponse'
+          description: KYC not approved or circuit breaker active
+        '401':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/WalletErrorResponse'
+          description: JWT missing or expired
+  /api/v1/wallet/withdraw:
+    post:
+      operationId: wallet_withdraw
+      description: |-
+        Redeems ARCX tokens back to INR at the current oracle NAV price. A redemption fee is deducted — see `fee_inr` in the response. KYC approval and an active (non-frozen) wallet are both required.
+
+        **Idempotency:** Include `Idempotency-Key` UUID header to prevent double-redemptions.
+      summary: Withdraw ARCX -> INR
+      parameters:
+      - in: header
+        name: Idempotency-Key
+        schema:
+          type: string
+          format: uuid
+        description: A unique UUID v4 per request. Prevents duplicate redemptions
+          on retry.
+        required: true
+      tags:
+      - Wallet
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/WithdrawRequestRequest'
+            examples:
+              Withdraw10.5ARCX:
+                value:
+                  amount_arcx: '10.5'
+                summary: Withdraw 10.5 ARCX
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/WithdrawRequestRequest'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/WithdrawRequestRequest'
+        required: true
+      security:
+      - jwtAuth: []
+      - BearerAuth: []
+      responses:
+        '201':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/WithdrawResponse'
+              examples:
+                WithdrawSuccess:
+                  value:
+                    transaction_id: 3fa85f64-5717-4562-b3fc-2c963f66afa6
+                    gross_inr: '1069.25'
+                    fee_inr: '0.35'
+                    inr_returned: '1068.90'
+                    nav_at_tx: '101.80'
+                    new_balance: '38.623456789012345678'
+                  summary: Withdraw success
+          description: ''
+        '400':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/WalletErrorResponse'
+          description: Insufficient balance or validation error
+        '403':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/WalletErrorResponse'
+          description: KYC not approved, wallet frozen, or circuit breaker active
+        '401':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/WalletErrorResponse'
+          description: JWT missing or expired
+  /api/v1/wallet/history:
+    get:
+      operationId: wallet_history
+      description: Returns the most recent N transactions for the authenticated user,
+        ordered newest-first. Includes deposits, withdrawals, transfers, and dividends.
+        Maximum `limit` is capped at 100.
+      summary: Get transaction history
+      parameters:
+      - in: query
+        name: limit
+        schema:
+          type: integer
+          default: 20
+        description: Number of transactions to return. Default 20, max 100.
+      tags:
+      - Wallet
+      security:
+      - jwtAuth: []
+      - BearerAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TransactionListResponse'
+          description: ''
+        '401':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/WalletErrorResponse'
+          description: JWT missing or expired
+  /api/v1/transfer/:
+    post:
+      operationId: transfer_arcx
+      description: |-
+        Sends ARCX tokens from the authenticated user to any other ARCX user identified by email. Both wallets are updated atomically in a single database transaction — no partial states.
+
+        **Zero fees.** SWIFT charges $25-50 and takes 3-5 days. ARCX charges ₹0 and settles in under 100ms.
+
+        **Idempotency:** Include `Idempotency-Key` UUID header to prevent duplicate transfers on retry.
+
+        **Requirements:** KYC approved + active (non-frozen) wallet.
+      summary: Transfer ARCX to another user
+      parameters:
+      - in: header
+        name: Idempotency-Key
+        schema:
+          type: string
+          format: uuid
+        description: A unique UUID v4 per request. Prevents duplicate transfers on
+          retry.
+        required: true
+      tags:
+      - Transfer
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/TransferRequestRequest'
+            examples:
+              Transfer10.5ARCX:
+                value:
+                  to_user_email: priya@example.com
+                  amount_arcx: '10.500000000000000000'
+                  note: Splitting dinner
+                summary: Transfer 10.5 ARCX
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/TransferRequestRequest'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/TransferRequestRequest'
+        required: true
+      security:
+      - jwtAuth: []
+      - BearerAuth: []
+      responses:
+        '201':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TransferResponse'
+              examples:
+                TransferSuccess:
+                  value:
+                    transaction_id: 3fa85f64-5717-4562-b3fc-2c963f66afa6
+                    amount_sent: '10.500000000000000000'
+                    recipient_email: priya@example.com
+                    new_balance: '89.500000000000000000'
+                    fee: '0.00'
+                    note: Splitting dinner
+                  summary: Transfer success
+          description: ''
+        '400':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TransferErrorResponse'
+              examples:
+                InsufficientBalance:
+                  value:
+                    error: Insufficient ARCX balance.
+                    code: INSUFFICIENT_BALANCE
+                  summary: Insufficient balance
+                RecipientNotFound:
+                  value:
+                    error: Recipient not found or inactive.
+                    code: RECIPIENT_NOT_FOUND
+                  summary: Recipient not found
+          description: Insufficient balance, recipient not found, or self-transfer
+            attempted
+        '403':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TransferErrorResponse'
+          description: KYC not approved, wallet frozen, or circuit breaker active
+        '401':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TransferErrorResponse'
+          description: JWT missing or expired
+  /api/v1/oracle/price:
+    get:
+      operationId: oracle_live_price
+      description: |-
+        **Public endpoint** — no authentication required.
+
+        Returns real-time TWAP prices for all vault assets (SPY, TLT, GLD) and the current ARCX NAV in both USD and INR. The frontend polls this every 30 seconds.
+
+        NAV is calculated from the latest vault snapshot using the formula:
+        `NAV = total_vault_value_USD / total_arcx_supply`
+      summary: Get live NAV and asset prices
+      tags:
+      - Oracle
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/OraclePriceResponse'
+              examples:
+                LivePriceResponse:
+                  value:
+                    spy_usd: '530.2500'
+                    tlt_usd: '95.1000'
+                    gld_usd: '185.4000'
+                    usd_inr: '83.5000'
+                    nav_usd: '1.19520000'
+                    nav_inr: '99.8000'
+                    sources_used:
+                    - Yahoo Finance
+                    fetched_at: '2025-06-01T10:30:00Z'
+                  summary: Live price response
+          description: ''
+        '503':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/OracleErrorResponse'
+              examples:
+                OracleDown:
+                  value:
+                    error: Live price data is temporarily unavailable. Please retry.
+                    code: ORACLE_UNAVAILABLE
+                  summary: Oracle down
+          description: All price sources are temporarily unavailable
+  /api/v1/nav/history:
+    get:
+      operationId: nav_history
+      description: |-
+        **Public endpoint** — no authentication required.
+
+        Returns daily NAV history used to power the price chart. Default is the last 30 days; maximum is 365 days.
+
+        This data is publicly auditable — anyone can verify ARCX's price history.
+      summary: Get historical NAV data
+      parameters:
+      - in: query
+        name: days
+        schema:
+          type: integer
+          default: 30
+        description: Number of days of history to return. Default 30, max 365.
+      tags:
+      - Oracle
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/NAVHistoryListResponse'
+          description: ''
+  /api/v1/nav/today:
+    get:
+      operationId: nav_today
+      description: |-
+        **Public endpoint** — no authentication required.
+
+        Returns today's officially published NAV along with a SHA-256 `report_hash`. The hash is computed from the raw vault data — anyone can independently verify this NAV was not tampered with after publication.
+      summary: Get today's published NAV
+      tags:
+      - Oracle
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TodayNAVResponse'
+              examples:
+                Today'sNAV:
+                  value:
+                    nav_date: '2025-06-01'
+                    nav_usd: '1.19520000'
+                    nav_inr: '99.8000'
+                    dividend_accrued_inr: '0.0250'
+                    report_hash: a7b3c9d1e5f2...
+                    published_at: '2025-06-01T18:30:00Z'
+                  summary: Today's NAV
+          description: ''
+        '404':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/OracleErrorResponse'
+              examples:
+                NoData:
+                  value:
+                    error: No NAV published yet.
+                    code: NO_NAV_DATA
+                  summary: No data
+          description: No NAV has been published yet
+  /api/v1/portfolio/analytics:
+    get:
+      operationId: portfolio_analytics
+      description: |-
+        Returns a complete analytics snapshot for the authenticated user's portfolio:
+
+        - **Holdings** - current balance, cost basis, live value, unrealized P&L, avg buy price
+        - **Yield earned** - total ARCX and INR earned through dividend distributions
+        - **Transaction breakdown** - deposit/withdraw/transfer/dividend counts and totals
+        - **P&L series** - day-by-day portfolio value vs cost basis (powers the chart)
+
+        The live NAV is fetched from the oracle on every call. If the oracle is unavailable, the last known NAV from the vault snapshot is used as a fallback.
+      summary: Get portfolio analytics and P&L
+      tags:
+      - Portfolio
+      security:
+      - jwtAuth: []
+      - BearerAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PortfolioAnalyticsResponse'
+          description: ''
+        '404':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PortfolioErrorResponse'
+          description: Wallet not found for this user
+        '500':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PortfolioErrorResponse'
+          description: Internal error fetching wallet or NAV
+        '401':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PortfolioErrorResponse'
+          description: JWT missing or expired
+  /api/v1/admin/users:
+    get:
+      operationId: admin_user_list
+      description: |-
+        Returns the 100 most recently created users with their wallet balances and KYC status. **Requires Django `is_staff=True`.**
+
+        Use for treasury operations, support investigations, and compliance audits.
+      summary: List all users (staff only)
+      tags:
+      - Admin
+      security:
+      - jwtAuth: []
+      - BearerAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AdminUserListResponse'
+          description: ''
+        '403':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AdminErrorResponse'
+          description: Not a staff user
+        '401':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AdminErrorResponse'
+          description: JWT missing or expired
+  /api/v1/admin/kyc:
+    get:
+      operationId: admin_kyc_list
+      description: Returns all KYC records with `status=pending`, ordered oldest-first
+        (FIFO review queue). **Requires Django `is_staff=True`.**
+      summary: List pending KYC submissions (staff only)
+      tags:
+      - Admin
+      security:
+      - jwtAuth: []
+      - BearerAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PendingKYCListResponse'
+          description: ''
+        '403':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AdminErrorResponse'
+          description: Not a staff user
+        '401':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AdminErrorResponse'
+          description: JWT missing or expired
+    post:
+      operationId: admin_kyc_action
+      description: |-
+        Approves or rejects a pending KYC record and updates the user's `kyc_status` atomically. **Requires Django `is_staff=True`.**
+
+        - `approve` → user gains deposit/withdraw/transfer access
+        - `reject` → user stays blocked; they may resubmit
+
+        All state changes are wrapped in a database transaction and logged.
+      summary: Approve or reject a KYC submission (staff only)
+      tags:
+      - Admin
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/KYCActionRequestRequest'
+            examples:
+              ApproveKYC:
+                value:
+                  record_id: 3fa85f64-5717-4562-b3fc-2c963f66afa6
+                  action: approve
+                summary: Approve KYC
+              RejectKYC:
+                value:
+                  record_id: 3fa85f64-5717-4562-b3fc-2c963f66afa6
+                  action: reject
+                summary: Reject KYC
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/KYCActionRequestRequest'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/KYCActionRequestRequest'
+        required: true
+      security:
+      - jwtAuth: []
+      - BearerAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/KYCActionResponse'
+          description: ''
+        '400':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AdminErrorResponse'
+              examples:
+                NotPending:
+                  value:
+                    error: KYC record is not pending.
+                  summary: Not pending
+                BadAction:
+                  value:
+                    error: Action must be approve or reject.
+                  summary: Bad action
+          description: Invalid action or KYC record is not pending
+        '404':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AdminErrorResponse'
+          description: KYC record not found
+        '403':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AdminErrorResponse'
+          description: Not a staff user
+  /api/v1/admin/nav/compute:
+    post:
+      operationId: admin_nav_compute
+      description: |-
+        Manually triggers the end-of-day vault snapshot and NAV publication pipeline. Normally this runs automatically on a schedule. Use this for:
+
+        - Forcing a same-day NAV update after large inflows
+        - Re-running after an oracle failure
+        - Testing the EOD pipeline in staging
+
+        **Requires Django `is_staff=True`.** All operations are logged.
+      summary: Trigger manual NAV computation (staff only)
+      tags:
+      - Admin
+      security:
+      - jwtAuth: []
+      - BearerAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/NAVComputeResponse'
+              examples:
+                NAVComputedSuccessfully:
+                  value:
+                    message: NAV calculated successfully.
+                    nav_inr: '99.8000'
+                    nav_usd: '1.19520000'
+                    date: '2025-06-01'
+                  summary: NAV computed successfully
+          description: ''
+        '500':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AdminErrorResponse'
+          description: NAV computation failed — check oracle availability
+        '403':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AdminErrorResponse'
+          description: Not a staff user
+  /api/auth/token/:
+    post:
+      operationId: auth_token_create
+      description: |-
+        Takes a set of user credentials and returns an access and refresh JSON web
+        token pair to prove the authentication of those credentials.
+      tags:
+      - auth
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/TokenObtainPairRequest'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/TokenObtainPairRequest'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/TokenObtainPairRequest'
+        required: true
+      security:
+      - BearerAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TokenObtainPair'
+          description: ''
+  /api/auth/token/refresh/:
+    post:
+      operationId: auth_token_refresh_create
+      description: |-
+        Takes a refresh type JSON web token and returns an access type JSON web
+        token if the refresh token is valid.
+      tags:
+      - auth
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/TokenRefreshRequest'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/TokenRefreshRequest'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/TokenRefreshRequest'
+        required: true
+      security:
+      - BearerAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TokenRefresh'
+          description: ''
+components:
+  schemas:
+    ActionEnum:
+      enum:
+      - approve
+      - reject
+      type: string
+      description: |-
+        * `approve` - approve
+        * `reject` - reject
+    AdminErrorResponse:
+      type: object
+      properties:
+        error:
+          type: string
+      required:
+      - error
+    AdminUserListResponse:
+      type: object
+      properties:
+        users:
+          type: array
+          items:
+            type: object
+            additionalProperties: {}
+          description: List of user records
+      required:
+      - users
+    DepositRequestRequest:
+      type: object
+      description: |-
+        Validates a deposit request.
+
+        amount_inr: How much INR the user wants to convert to ARCX.
+        Minimum ₹100. No maximum (KYC tier limit enforced in service layer).
+      properties:
+        amount_inr:
+          type: string
+          format: decimal
+          pattern: ^-?\d{0,18}(?:\.\d{0,2})?$
+      required:
+      - amount_inr
+    DepositResponse:
+      type: object
+      properties:
+        transaction_id:
+          type: string
+          format: uuid
+          description: Unique transaction ID
+        arcx_credited:
+          type: string
+          format: decimal
+          pattern: ^-?\d{0,10}(?:\.\d{0,18})?$
+          description: ARCX tokens credited to wallet
+        nav_at_tx:
+          type: string
+          format: decimal
+          pattern: ^-?\d{0,16}(?:\.\d{0,4})?$
+          description: NAV price used for this conversion (INR)
+        new_balance:
+          type: string
+          format: decimal
+          pattern: ^-?\d{0,10}(?:\.\d{0,18})?$
+          description: Updated ARCX wallet balance
+      required:
+      - arcx_credited
+      - nav_at_tx
+      - new_balance
+      - transaction_id
+    DocumentTypeEnum:
+      enum:
+      - aadhaar
+      - pan
+      - passport
+      - dl
+      type: string
+      description: |-
+        * `aadhaar` - Aadhaar Card
+        * `pan` - PAN Card
+        * `passport` - Passport
+        * `dl` - Driving License
+    ErrorResponse:
+      type: object
+      properties:
+        error:
+          type: string
+          description: Human-readable error message
+        code:
+          type: string
+          description: Machine-readable snake_case error code
+      required:
+      - code
+      - error
+    KYCActionRequestRequest:
+      type: object
+      properties:
+        record_id:
+          type: string
+          format: uuid
+          description: UUID of the KYCRecord to action
+        action:
+          allOf:
+          - $ref: '#/components/schemas/ActionEnum'
+          description: |-
+            approve -> sets user kyc_status=approved | reject -> sets kyc_status=rejected
+
+            * `approve` - approve
+            * `reject` - reject
+      required:
+      - action
+      - record_id
+    KYCActionResponse:
+      type: object
+      properties:
+        message:
+          type: string
+      required:
+      - message
+    KYCErrorResponse:
+      type: object
+      properties:
+        error:
+          type: string
+        code:
+          type: string
+      required:
+      - code
+      - error
+    KYCStatusResponse:
+      type: object
+      properties:
+        kyc_status:
+          type: string
+          description: Overall KYC status on the user account
+        highest_tier:
+          type: string
+          nullable: true
+          description: Highest approved KYC tier
+        daily_limit_inr:
+          type: string
+          description: Current daily transaction limit based on KYC tier
+        records:
+          type: array
+          items:
+            type: object
+            additionalProperties: {}
+            description: 'KYC record: id, tier, status, document_type, verified_at,
+              submitted_at'
+          description: All KYC submissions for this user
+      required:
+      - daily_limit_inr
+      - highest_tier
+      - kyc_status
+      - records
+    KYCSubmitRequest:
+      type: object
+      description: |-
+        POST /api/v1/kyc/submit
+
+        document_ref: The external ID returned by your KYC provider
+                      (DigiLocker, Onfido, CKYC, etc.).
+                      We never store the actual document — only this reference.
+      properties:
+        tier:
+          $ref: '#/components/schemas/TierEnum'
+        document_type:
+          $ref: '#/components/schemas/DocumentTypeEnum'
+        document_ref:
+          type: string
+          minLength: 1
+          description: External reference ID from KYC provider. Never send raw document
+            data.
+          maxLength: 255
+      required:
+      - document_ref
+      - document_type
+      - tier
+    KYCSubmitResponse:
+      type: object
+      properties:
+        kyc_id:
+          type: string
+          format: uuid
+          description: Unique ID of the KYC record
+        tier:
+          type: string
+          description: 'KYC tier that was approved: tier_1, tier_2, or tier_3'
+        status:
+          type: string
+          description: 'Status of this KYC record: approved, pending, or rejected'
+        verified_at:
+          type: string
+          format: date-time
+          nullable: true
+        message:
+          type: string
+          description: Human-readable summary of the approval with daily limit
+      required:
+      - kyc_id
+      - message
+      - status
+      - tier
+      - verified_at
+    KycStatusEnum:
+      enum:
+      - pending
+      - approved
+      - rejected
+      - suspended
+      type: string
+      description: |-
+        * `pending` - Pending
+        * `approved` - Approved
+        * `rejected` - Rejected
+        * `suspended` - Suspended
+    LogoutRequestRequest:
+      type: object
+      description: |-
+        POST /api/v1/auth/logout
+
+        Takes the refresh token. Blacklists it so it can't be used to
+        generate new access tokens. The current access token expires
+        naturally (30 min) — there's no server-side access token invalidation
+        in the simplejwt default setup.
+      properties:
+        refresh_token:
+          type: string
+          minLength: 1
+      required:
+      - refresh_token
+    LogoutSuccess:
+      type: object
+      properties:
+        message:
+          type: string
+      required:
+      - message
+    NAVComputeResponse:
+      type: object
+      properties:
+        message:
+          type: string
+        nav_inr:
+          type: string
+          format: decimal
+          pattern: ^-?\d{0,16}(?:\.\d{0,4})?$
+          nullable: true
+        nav_usd:
+          type: string
+          format: decimal
+          pattern: ^-?\d{0,12}(?:\.\d{0,8})?$
+          nullable: true
+        date:
+          type: string
+          format: date
+          nullable: true
+      required:
+      - date
+      - message
+      - nav_inr
+      - nav_usd
+    NAVHistoryListResponse:
+      type: object
+      properties:
+        history:
+          type: array
+          items:
+            type: object
+            additionalProperties: {}
+          description: List of NAV history records
+      required:
+      - history
+    OracleErrorResponse:
+      type: object
+      properties:
+        error:
+          type: string
+        code:
+          type: string
+      required:
+      - code
+      - error
+    OraclePriceResponse:
+      type: object
+      description: |-
+        Response shape for /api/v1/oracle/price.
+        Shows full TWAP breakdown per asset + final NAV.
+      properties:
+        spy_usd:
+          type: string
+          format: decimal
+          pattern: ^-?\d{0,8}(?:\.\d{0,4})?$
+        tlt_usd:
+          type: string
+          format: decimal
+          pattern: ^-?\d{0,8}(?:\.\d{0,4})?$
+        gld_usd:
+          type: string
+          format: decimal
+          pattern: ^-?\d{0,8}(?:\.\d{0,4})?$
+        usd_inr:
+          type: string
+          format: decimal
+          pattern: ^-?\d{0,6}(?:\.\d{0,4})?$
+        nav_usd:
+          type: string
+          format: decimal
+          pattern: ^-?\d{0,12}(?:\.\d{0,8})?$
+        nav_inr:
+          type: string
+          format: decimal
+          pattern: ^-?\d{0,16}(?:\.\d{0,4})?$
+        sources_used:
+          type: array
+          items:
+            type: string
+        fetched_at:
+          type: string
+          format: date-time
+      required:
+      - fetched_at
+      - gld_usd
+      - nav_inr
+      - nav_usd
+      - sources_used
+      - spy_usd
+      - tlt_usd
+      - usd_inr
+    PendingKYCListResponse:
+      type: object
+      properties:
+        pending_kyc:
+          type: array
+          items:
+            type: object
+            additionalProperties: {}
+          description: List of pending KYC records
+      required:
+      - pending_kyc
+    PortfolioAnalyticsResponse:
+      type: object
+      properties:
+        holdings:
+          type: object
+          additionalProperties: {}
+          description: 'Current portfolio snapshot: arcx_balance, cost_basis_inr,
+            current_value_inr, unrealized_pnl_inr, pnl_pct, avg_buy_price_inr, current_nav_inr'
+        yield_earned:
+          type: object
+          additionalProperties: {}
+          description: 'Dividend yield totals: arcx (float), inr (float), count (int)'
+        tx_breakdown:
+          type: object
+          additionalProperties:
+            type: object
+            additionalProperties:
+              type: number
+              format: double
+          description: 'Transaction breakdown by type: {tx_type: {count, total_inr,
+            total_arcx}}'
+        pnl_series:
+          type: array
+          items:
+            type: object
+            additionalProperties: {}
+          description: 'Day-by-day P&L data points: {date, portfolio_value, cost_basis}'
+      required:
+      - holdings
+      - pnl_series
+      - tx_breakdown
+      - yield_earned
+    PortfolioErrorResponse:
+      type: object
+      properties:
+        error:
+          type: string
+        user_id:
+          type: string
+      required:
+      - error
+    RegisterRequestRequest:
+      type: object
+      description: |-
+        Validates new user registration.
+
+        password:  Must be at least 8 characters. We don't enforce complexity
+                   rules here (too annoying for demos) but production should.
+        phone:     Optional at registration. Can be added during Tier 1 KYC.
+      properties:
+        email:
+          type: string
+          format: email
+          minLength: 1
+        password:
+          type: string
+          writeOnly: true
+          minLength: 8
+        full_name:
+          type: string
+          minLength: 1
+          maxLength: 255
+        phone:
+          type: string
+          maxLength: 20
+      required:
+      - email
+      - full_name
+      - password
+    RegisterResponse:
+      type: object
+      description: |-
+        What we return after successful registration.
+        We return JWT tokens immediately so the user is logged in right away.
+        No separate login step required.
+      properties:
+        user_id:
+          type: string
+          format: uuid
+        email:
+          type: string
+          format: email
+        full_name:
+          type: string
+        kyc_status:
+          type: string
+        access_token:
+          type: string
+        refresh_token:
+          type: string
+        message:
+          type: string
+      required:
+      - access_token
+      - email
+      - full_name
+      - kyc_status
+      - message
+      - refresh_token
+      - user_id
+    TierEnum:
+      enum:
+      - tier_1
+      - tier_2
+      - tier_3
+      type: string
+      description: |-
+        * `tier_1` - Tier 1 — Aadhaar OTP
+        * `tier_2` - Tier 2 — PAN + Selfie
+        * `tier_3` - Tier 3 — Full Address Proof
+    TodayNAVResponse:
+      type: object
+      properties:
+        nav_date:
+          type: string
+          format: date
+          description: Date of this NAV publication
+        nav_usd:
+          type: string
+          format: decimal
+          pattern: ^-?\d{0,12}(?:\.\d{0,8})?$
+        nav_inr:
+          type: string
+          format: decimal
+          pattern: ^-?\d{0,16}(?:\.\d{0,4})?$
+        dividend_accrued_inr:
+          type: string
+          format: decimal
+          pattern: ^-?\d{0,16}(?:\.\d{0,4})?$
+        report_hash:
+          type: string
+          description: SHA-256 hash — verify the NAV was not tampered with
+        published_at:
+          type: string
+          format: date-time
+      required:
+      - dividend_accrued_inr
+      - nav_date
+      - nav_inr
+      - nav_usd
+      - published_at
+      - report_hash
+    TokenObtainPair:
+      type: object
+      properties:
+        access:
+          type: string
+          readOnly: true
+        refresh:
+          type: string
+          readOnly: true
+      required:
+      - access
+      - refresh
+    TokenObtainPairRequest:
+      type: object
+      properties:
+        username:
+          type: string
+          writeOnly: true
+          minLength: 1
+        password:
+          type: string
+          writeOnly: true
+          minLength: 1
+      required:
+      - password
+      - username
+    TokenRefresh:
+      type: object
+      properties:
+        access:
+          type: string
+          readOnly: true
+        refresh:
+          type: string
+      required:
+      - access
+      - refresh
+    TokenRefreshRequest:
+      type: object
+      properties:
+        refresh:
+          type: string
+          minLength: 1
+      required:
+      - refresh
+    TransactionListResponse:
+      type: object
+      properties:
+        transactions:
+          type: array
+          items:
+            type: object
+            additionalProperties: {}
+          description: List of transaction records (id, tx_type, amount_arcx, amount_inr,
+            fee_inr, nav_at_tx, status, created_at)
+        count:
+          type: integer
+      required:
+      - count
+      - transactions
+    TransferErrorResponse:
+      type: object
+      properties:
+        error:
+          type: string
+        code:
+          type: string
+      required:
+      - code
+      - error
+    TransferRequestRequest:
+      type: object
+      description: |-
+        Validates a peer-to-peer ARCX transfer.
+
+        to_user_email: The recipient. We look up their wallet server-side.
+                       We never expose wallet IDs to clients.
+        amount_arcx:   How much to send.
+        note:          Optional message (think UPI "note" field).
+      properties:
+        to_user_email:
+          type: string
+          format: email
+          minLength: 1
+        amount_arcx:
+          type: string
+          format: decimal
+          pattern: ^-?\d{0,10}(?:\.\d{0,18})?$
+        note:
+          type: string
+          maxLength: 140
+      required:
+      - amount_arcx
+      - to_user_email
+    TransferResponse:
+      type: object
+      properties:
+        transaction_id:
+          type: string
+          format: uuid
+          description: Unique transaction ID
+        amount_sent:
+          type: string
+          format: decimal
+          pattern: ^-?\d{0,10}(?:\.\d{0,18})?$
+          description: ARCX tokens sent
+        recipient_email:
+          type: string
+          format: email
+          description: Recipient's email address
+        new_balance:
+          type: string
+          format: decimal
+          pattern: ^-?\d{0,10}(?:\.\d{0,18})?$
+          description: Sender's updated ARCX balance
+        fee:
+          type: string
+          description: Always 0.00 — zero-fee transfers
+        note:
+          type: string
+          description: Optional memo attached to this transfer
+      required:
+      - amount_sent
+      - fee
+      - new_balance
+      - note
+      - recipient_email
+      - transaction_id
+    UserProfile:
+      type: object
+      description: |-
+        GET /api/v1/auth/me — full profile with wallet summary.
+        The wallet balance is nested in the response — one API call gets everything.
+      properties:
+        id:
+          type: string
+          format: uuid
+          readOnly: true
+        email:
+          type: string
+          format: email
+          maxLength: 254
+        full_name:
+          type: string
+          maxLength: 255
+        phone:
+          type: string
+          nullable: true
+          maxLength: 20
+        kyc_status:
+          $ref: '#/components/schemas/KycStatusEnum'
+        is_active:
+          type: boolean
+        wallet_id:
+          type: string
+          format: uuid
+          readOnly: true
+        arcx_balance:
+          type: string
+          format: decimal
+          pattern: ^-?\d{0,10}(?:\.\d{0,18})?$
+          readOnly: true
+        cost_basis_inr:
+          type: string
+          format: decimal
+          pattern: ^-?\d{0,16}(?:\.\d{0,4})?$
+          readOnly: true
+        created_at:
+          type: string
+          format: date-time
+          readOnly: true
+      required:
+      - arcx_balance
+      - cost_basis_inr
+      - created_at
+      - email
+      - full_name
+      - id
+      - wallet_id
+    WalletErrorResponse:
+      type: object
+      properties:
+        error:
+          type: string
+        code:
+          type: string
+      required:
+      - code
+      - error
+    WalletResponse:
+      type: object
+      description: |-
+        Shapes wallet data for the response.
+        Never exposes internal fields like is_frozen or cost_basis directly.
+        unrealized_pnl_inr is a computed field — not stored in DB.
+      properties:
+        id:
+          type: string
+          format: uuid
+          readOnly: true
+        user_email:
+          type: string
+          format: email
+          readOnly: true
+        arcx_balance:
+          type: string
+          format: decimal
+          pattern: ^-?\d{0,10}(?:\.\d{0,18})?$
+        cost_basis_inr:
+          type: string
+          format: decimal
+          pattern: ^-?\d{0,16}(?:\.\d{0,4})?$
+        unrealized_pnl_inr:
+          type: string
+          description: |-
+            P&L = (current_value) - (what_you_paid)
+            current_value = arcx_balance * current_nav_inr
+
+            current_nav_inr is injected via serializer context from the view.
+            If not available (e.g., oracle down), returns None gracefully.
+            Returns a decimal string or null.
+          readOnly: true
+        updated_at:
+          type: string
+          format: date-time
+          readOnly: true
+      required:
+      - id
+      - unrealized_pnl_inr
+      - updated_at
+      - user_email
+    WithdrawRequestRequest:
+      type: object
+      description: |-
+        Validates a withdrawal request.
+
+        amount_arcx: How many ARCX tokens to sell back.
+        Minimum 0.01 ARCX.
+      properties:
+        amount_arcx:
+          type: string
+          format: decimal
+          pattern: ^-?\d{0,10}(?:\.\d{0,18})?$
+      required:
+      - amount_arcx
+    WithdrawResponse:
+      type: object
+      properties:
+        transaction_id:
+          type: string
+          format: uuid
+        gross_inr:
+          type: string
+          format: decimal
+          pattern: ^-?\d{0,16}(?:\.\d{0,4})?$
+          description: INR before fees
+        fee_inr:
+          type: string
+          format: decimal
+          pattern: ^-?\d{0,16}(?:\.\d{0,4})?$
+          description: Redemption fee charged
+        inr_returned:
+          type: string
+          format: decimal
+          pattern: ^-?\d{0,16}(?:\.\d{0,4})?$
+          description: Net INR returned to user
+        nav_at_tx:
+          type: string
+          format: decimal
+          pattern: ^-?\d{0,16}(?:\.\d{0,4})?$
+          description: NAV price used for this conversion (INR)
+        new_balance:
+          type: string
+          format: decimal
+          pattern: ^-?\d{0,10}(?:\.\d{0,18})?$
+          description: Updated ARCX wallet balance
+      required:
+      - fee_inr
+      - gross_inr
+      - inr_returned
+      - nav_at_tx
+      - new_balance
+      - transaction_id
+  securitySchemes:
+    jwtAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+tags:
+- name: Auth
+  description: Registration, login, logout, and user profile
+- name: KYC
+  description: KYC document submission and status checks
+- name: Wallet
+  description: Balance, deposit, withdraw, transaction history
+- name: Transfer
+  description: Peer-to-peer ARCX token transfers
+- name: Oracle
+  description: Live NAV prices and historical data (public)
+- name: Portfolio
+  description: Holdings analytics, P&L series, yield tracking
+- name: Admin
+  description: Staff-only endpoints for user and NAV management

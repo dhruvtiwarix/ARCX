@@ -118,15 +118,15 @@ class Command(BaseCommand):
         error_count   = 0
 
         # We'll carry forward vault state day by day
-        prev_snapshot = VaultSnapshot.objects.order_by("snapshot_date").first()
-        if prev_snapshot:
-            current_supply    = float(prev_snapshot.arcx_supply)
-            current_vault_usd = float(prev_snapshot.total_value_usd)
-            self.stdout.write(f"  [-] Continuing from existing snapshot: {prev_snapshot.snapshot_date}")
-        else:
-            current_supply    = GENESIS_ARCX_SUPPLY
-            current_vault_usd = GENESIS_VAULT_VALUE_USD
-            self.stdout.write("  [-] Starting from genesis values.")
+        # But we must use the TRUE live supply from Wallets so we don't corrupt the live DB!
+        from arcx_core.models import Wallet
+        from django.db.models import Sum
+        true_supply = Wallet.objects.aggregate(Sum('arcx_balance'))['arcx_balance__sum']
+        
+        current_supply    = float(true_supply) if true_supply else GENESIS_ARCX_SUPPLY
+        # Anchor the vault value to the supply (approx $1.20 per token starting NAV)
+        current_vault_usd = current_supply * 1.20
+        self.stdout.write(f"  [-] Starting backfill simulation anchored to true supply: {current_supply}")
 
         # Iterate over dates with valid data
         sorted_dates = sorted(close.index)
@@ -175,11 +175,13 @@ class Command(BaseCommand):
                 fetched_at   = dt.combine(nav_date, dt.min.time()),
             )
 
+            # Phase 6: backfill uses cash-only engine (no actual DB holdings exist for history)
+            # The vault value is carried forward as cash_balance_usd between days.
             engine = ValuationEngine(
-                arcx_supply     = current_supply,
-                vault_value_usd = current_vault_usd,
+                arcx_supply      = current_supply,
+                cash_balance_usd = current_vault_usd,
             )
-            state = engine.calculate_nav(prices)
+            state = engine.calculate_nav([], prices)   # empty holdings = pure cash simulation
 
             dividend_engine = DividendAccrualEngine()
             accrual = dividend_engine.accrue_daily_yield(
@@ -188,13 +190,13 @@ class Command(BaseCommand):
                 prices          = prices,
             )
 
-            rebalancer  = DriftRebalancer()
+            # Phase 6: rebalancer now takes holdings dict + live_prices
+            rebalancer   = DriftRebalancer()
             rebal_report = rebalancer.analyze(
-                vault_value_usd = state.total_vault_value_usd,
-                stock_value_usd = state.stock_value_usd,
-                bond_value_usd  = state.bond_value_usd,
-                gold_value_usd  = state.gold_value_usd,
-                cash_value_usd  = state.cash_value_usd,
+                vault_value_usd  = float(state.total_vault_value_usd),
+                holdings         = {},   # no actual holdings in backfill simulation
+                cash_balance_usd = float(state.cash_balance_usd),
+                live_prices      = {"SPY": spy_price, "TLT": tlt_price, "GLD": gld_price},
             )
             reporter    = NAVReportGenerator()
             report_data = reporter.generate(prices, state, accrual, rebal_report)
@@ -204,11 +206,11 @@ class Command(BaseCommand):
                 with transaction.atomic():
                     snapshot = VaultSnapshot.objects.create(
                         snapshot_date   = nav_date,
-                        total_value_usd = Decimal(str(round(state.total_vault_value_usd, 4))),
-                        stock_value_usd = Decimal(str(round(state.stock_value_usd, 4))),
-                        bond_value_usd  = Decimal(str(round(state.bond_value_usd, 4))),
-                        gold_value_usd  = Decimal(str(round(state.gold_value_usd, 4))),
-                        cash_value_usd  = Decimal(str(round(state.cash_value_usd, 4))),
+                        total_value_usd = Decimal(str(round(float(state.total_vault_value_usd), 4))),
+                        stock_value_usd = Decimal(str(round(float(state.stock_value_usd), 4))),
+                        bond_value_usd  = Decimal(str(round(float(state.bond_value_usd), 4))),
+                        gold_value_usd  = Decimal(str(round(float(state.gold_value_usd), 4))),
+                        cash_value_usd  = Decimal(str(round(float(state.cash_value_usd), 4))),
                         arcx_supply     = Decimal(str(round(current_supply, 18))),
                         spy_twap        = Decimal(str(round(spy_price, 4))),
                         tlt_twap        = Decimal(str(round(tlt_price, 4))),
@@ -225,7 +227,7 @@ class Command(BaseCommand):
                         report_hash          = report_hash,
                     )
 
-                    current_vault_usd = state.total_vault_value_usd + accrual.total_yield_usd
+                    current_vault_usd = float(state.total_vault_value_usd) + accrual.total_yield_usd
 
                 created_count += 1
                 self.stdout.write(

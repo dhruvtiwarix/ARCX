@@ -38,14 +38,14 @@ INSTALLED_APPS = [
     'django.contrib.sessions',
     'django.contrib.messages',
     'django.contrib.staticfiles',
-    # Add your nested app here
-    #phase 3 dependencies
-
+    # Third-party
     "corsheaders",
     "rest_framework",
     "rest_framework_simplejwt",
     "rest_framework_simplejwt.token_blacklist",
     "django_apscheduler",   # Phase 12 — in-process scheduler (no Redis required)
+    "drf_spectacular",      # Phase API-Docs — OpenAPI 3.0 schema + Swagger/ReDoc UI
+    # ARCX apps
     "arcx_core",
 ]
 
@@ -133,6 +133,65 @@ REST_FRAMEWORK = {
     "EXCEPTION_HANDLER": "arcx_core.exceptions.arcx_exception_handler",
     # Decimal values must stay as strings in JSON — never floats
     "COERCE_DECIMAL_TO_STRING": True,
+    # drf-spectacular: use the AutoSchema class for schema generation
+    "DEFAULT_SCHEMA_CLASS": "drf_spectacular.openapi.AutoSchema",
+}
+
+# ── drf-spectacular — OpenAPI 3.0 Schema Configuration ───────────────────────
+SPECTACULAR_SETTINGS = {
+    "TITLE": "ARCX Platform API",
+    "DESCRIPTION": (
+        "## ARCX — Algorithmic Reserve Currency Exchange\n\n"
+        "ARCX is an INR-denominated, NAV-backed digital asset platform. "
+        "Investors deposit INR which is converted to ARCX tokens at the current "
+        "NAV price. The vault holds a diversified portfolio (SPY, TLT, GLD) "
+        "rebalanced algorithmically.\n\n"
+        "### Authentication\n"
+        "All protected endpoints require a **Bearer JWT** in the `Authorization` header:\n"
+        "```\nAuthorization: Bearer <access_token>\n```\n\n"
+        "Obtain tokens via `POST /api/auth/token/` or `POST /api/v1/auth/register`.\n\n"
+        "### Idempotency\n"
+        "Financial mutation endpoints (deposit, withdraw, transfer) require an "
+        "`Idempotency-Key` UUID header to prevent duplicate transactions.\n\n"
+        "### Error Format\n"
+        "All errors follow: `{\"error\": \"message\", \"code\": \"SNAKE_CASE_CODE\"}`"
+    ),
+    "VERSION": "1.0.0",
+    "SERVE_INCLUDE_SCHEMA": False,   # Don't expose /api/schema/ as an API endpoint itself
+    "CONTACT": {
+        "name": "ARCX Engineering",
+        "email": "engineering@arcx.in",
+    },
+    "LICENSE": {
+        "name": "Proprietary",
+    },
+    # ── Security scheme — JWT Bearer ──────────────────────────────────────
+    "SECURITY": [{"BearerAuth": []}],
+    "SECURITY_DEFINITIONS": {
+        "BearerAuth": {
+            "type": "http",
+            "scheme": "bearer",
+            "bearerFormat": "JWT",
+            "description": "Enter your JWT access token. Obtain one via POST /api/auth/token/",
+        }
+    },
+    # ── Tag ordering for the Swagger UI sidebar ───────────────────────────
+    "TAGS": [
+        {"name": "Auth",      "description": "Registration, login, logout, and user profile"},
+        {"name": "KYC",       "description": "KYC document submission and status checks"},
+        {"name": "Wallet",    "description": "Balance, deposit, withdraw, transaction history"},
+        {"name": "Transfer",  "description": "Peer-to-peer ARCX token transfers"},
+        {"name": "Oracle",    "description": "Live NAV prices and historical data (public)"},
+        {"name": "Portfolio", "description": "Holdings analytics, P&L series, yield tracking"},
+        {"name": "Admin",     "description": "Staff-only endpoints for user and NAV management"},
+    ],
+    # ── Schema generation options ─────────────────────────────────────────
+    "ENUM_GENERATE_CHOICE_DESCRIPTION": True,
+    "COMPONENT_SPLIT_REQUEST": True,     # Separate request vs response schemas
+    "SORT_OPERATIONS": False,            # Keep URL order as defined
+    "POSTPROCESSING_HOOKS": [
+        "drf_spectacular.hooks.postprocess_schema_enums",
+    ],
 }
  
 # ── JWT Config ────────────────────────────────────────────────────────────────
@@ -189,6 +248,8 @@ USE_TZ = True
 # https://docs.djangoproject.com/en/5.2/howto/static-files/
 
 STATIC_URL = 'static/'
+STATIC_ROOT = BASE_DIR / 'staticfiles'   # For: python manage.py collectstatic
+
 
 # Default primary key field type
 # https://docs.djangoproject.com/en/5.2/ref/settings/#default-auto-field

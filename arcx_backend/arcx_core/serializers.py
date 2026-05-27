@@ -22,6 +22,8 @@ from rest_framework import serializers
 from arcx_core.models import User, Wallet, Transaction, NAVHistory, VaultSnapshot
 from rest_framework import serializers
 from arcx_core.models import User, Wallet, KYCRecord
+from drf_spectacular.utils import extend_schema_field
+from drf_spectacular.types import OpenApiTypes
 
 # ─────────────────────────────────────────────────────────────────────────────
 # Wallet Serializers
@@ -81,6 +83,7 @@ class WalletResponseSerializer(serializers.ModelSerializer):
             "updated_at",
         ]
 
+    @extend_schema_field(OpenApiTypes.STR)
     def get_unrealized_pnl_inr(self, wallet):
         """
         P&L = (current_value) - (what_you_paid)
@@ -88,6 +91,7 @@ class WalletResponseSerializer(serializers.ModelSerializer):
 
         current_nav_inr is injected via serializer context from the view.
         If not available (e.g., oracle down), returns None gracefully.
+        Returns a decimal string or null.
         """
         current_nav = self.context.get("current_nav_inr")
         if current_nav is None:
@@ -165,6 +169,11 @@ class OraclePriceResponseSerializer(serializers.Serializer):
     usd_inr      = serializers.DecimalField(max_digits=10, decimal_places=4)
     nav_usd      = serializers.DecimalField(max_digits=20, decimal_places=8)
     nav_inr      = serializers.DecimalField(max_digits=20, decimal_places=4)
+    spy_change   = serializers.DecimalField(max_digits=10, decimal_places=4, required=False)
+    tlt_change   = serializers.DecimalField(max_digits=10, decimal_places=4, required=False)
+    gld_change   = serializers.DecimalField(max_digits=10, decimal_places=4, required=False)
+    arcx_supply  = serializers.DecimalField(max_digits=28, decimal_places=18, required=False)
+    market_open  = serializers.BooleanField(required=False, default=True)
     sources_used = serializers.ListField(child=serializers.CharField())
     fetched_at   = serializers.DateTimeField()
 

@@ -27,6 +27,7 @@ In Phase 3 (Django), this report will be:
 import json
 import hashlib
 import os
+from decimal import Decimal
 from dataclasses import asdict
 from datetime import datetime
 from domain.oracle import MarketPrices
@@ -35,6 +36,18 @@ from domain.dividend import DailyAccrualResult, DividendAccrualEngine
 from domain.rebalancer import RebalanceReport, DriftRebalancer
 
 REPORTS_DIR = "reports"
+
+
+class _DecimalEncoder(json.JSONEncoder):
+    """
+    JSON encoder that converts Decimal to float.
+    Required because Phase 6 VaultState uses Decimal for financial precision.
+    The JSON report is for human readability — float precision is sufficient.
+    """
+    def default(self, obj):
+        if isinstance(obj, Decimal):
+            return float(obj)
+        return super().default(obj)
 
 
 class NAVReportGenerator:
@@ -110,23 +123,26 @@ class NAVReportGenerator:
                 "trades_required": len(rebalance.trades),
                 "trades": [
                     {
-                        "asset": t.asset,
-                        "action": t.action,
-                        "amount_usd": t.amount_usd,
-                        "reason": t.reason,
+                        "ticker":          t.ticker,          # Phase 6: ticker not asset
+                        "action":          t.action,
+                        "share_quantity":  float(t.share_quantity),   # broker-executable
+                        "dollar_amount":   float(t.dollar_amount),
+                        "execution_price": float(t.execution_price),
+                        "reason":          t.reason,
                     }
                     for t in rebalance.trades
                 ],
             },
 
             "nav": {
-                "nav_usd": vault_state.nav_usd,
-                "nav_inr": vault_state.nav_inr,
+                "nav_usd": float(vault_state.nav_usd),
+                "nav_inr": float(vault_state.nav_inr),
             },
         }
 
-        # ── SHA256 Signature ──────────────────────────────────────────────
-        report_json = json.dumps(report, sort_keys=True)
+        # ── SHA256 Signature ──────────────────────────────────────────────────────────────
+        # Use _DecimalEncoder so Phase 6 Decimal fields are JSON-serializable
+        report_json = json.dumps(report, sort_keys=True, cls=_DecimalEncoder)
         report_hash = hashlib.sha256(report_json.encode()).hexdigest()
         report["signature"] = {
             "algorithm": "SHA256",
@@ -144,6 +160,6 @@ class NAVReportGenerator:
         filename = timestamp.strftime("%Y-%m-%d_%H-%M-%S") + ".json"
         filepath = os.path.join(REPORTS_DIR, filename)
         with open(filepath, "w") as f:
-            json.dump(report, f, indent=2)
+            json.dump(report, f, indent=2, cls=_DecimalEncoder)
         print(f"\n  [Report] Saved: {filepath}")
         print(f"  [Report] Hash:  {report['signature']['hash'][:16]}...")

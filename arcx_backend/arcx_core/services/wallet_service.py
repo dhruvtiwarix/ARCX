@@ -23,7 +23,7 @@ from django.db.models import Sum
 
 from domain.oracle import MultiSourceOracle, OracleFailureException
 from domain.valuation import ValuationEngine
-from arcx_core.models import User, Wallet, Transaction, VaultSnapshot
+from arcx_core.models import User, Wallet, Transaction, VaultSnapshot, VaultAssetHolding
 from arcx_core.exceptions import (
     InsufficientBalanceError,
     WalletFrozenError,
@@ -122,6 +122,27 @@ class WalletService:
                 tx_id       = str(tx.id),
                 duration_ms = duration_ms,
             )
+
+            # Phase 6: Track cash influx in VaultSnapshot.
+            # When a user deposits, the vault receives cash.
+            # The Rebalancer (EOD task) will convert this cash to shares.
+            # Right now we just update the cash_value_usd in the latest snapshot
+            # so the ValuationEngine immediately reflects the new vault size.
+            try:
+                amount_usd      = (amount_inr / nav_inr).quantize(Decimal("0.0001"))
+                latest_snapshot = VaultSnapshot.objects.latest("snapshot_date")
+                latest_snapshot.cash_value_usd  += amount_usd
+                latest_snapshot.total_value_usd += amount_usd
+                latest_snapshot.arcx_supply     += arcx_to_mint
+                latest_snapshot.save(update_fields=["cash_value_usd", "total_value_usd", "arcx_supply", "updated_at"])
+                logger.debug(
+                    "Phase 6: Vault cash influx recorded. +$%s USD (user=%s)",
+                    amount_usd, user_id,
+                )
+            except VaultSnapshot.DoesNotExist:
+                # Genesis state: no snapshot yet — the first snapshot will pick up this balance.
+                logger.debug("No VaultSnapshot yet during deposit. Genesis state — skipping cash influx update.")
+
             return tx
 
         except (WalletFrozenError, KYCRequiredError, OracleUnavailableError) as exc:
@@ -209,6 +230,21 @@ class WalletService:
                     status          = Transaction.Status.COMPLETED,
                 )
 
+            # Phase 6: Track cash outflux in VaultSnapshot
+            try:
+                # We only deduct the gross amount in USD from the cash reserve.
+                # The fee is retained in the system (technically we could add it back, but let's just deduct net_inr? No, the vault is paying out the net, but retaining the fee. The vault's total equity is only reduced by net_inr.)
+                # Actually, the user burned `amount_arcx` tokens.
+                # The vault's total value decreases by `amount_arcx * nav_usd`.
+                burn_usd        = (inr_to_return / prices.usd_inr).quantize(Decimal("0.0001"))
+                latest_snapshot = VaultSnapshot.objects.latest("snapshot_date")
+                latest_snapshot.cash_value_usd  -= burn_usd
+                latest_snapshot.total_value_usd -= burn_usd
+                latest_snapshot.arcx_supply     -= amount_arcx
+                latest_snapshot.save(update_fields=["cash_value_usd", "total_value_usd", "arcx_supply", "updated_at"])
+            except VaultSnapshot.DoesNotExist:
+                pass
+
             duration_ms = int((time.monotonic() - op_start) * 1000)
             arcx_logger.withdraw_completed(
                 user_id      = user_id,
@@ -238,18 +274,21 @@ class WalletService:
         )
 
     def _get_nav_inr(self, prices) -> Decimal:
+        """Phase 6: Calculate NAV from actual share quantities × live prices."""
         try:
             snapshot = VaultSnapshot.objects.latest("snapshot_date")
+            holdings = list(VaultAssetHolding.objects.all())
             engine   = ValuationEngine(
-                arcx_supply     = float(snapshot.arcx_supply),
-                vault_value_usd = float(snapshot.total_value_usd),
+                arcx_supply      = float(snapshot.arcx_supply),
+                cash_balance_usd = float(snapshot.cash_value_usd),
             )
         except VaultSnapshot.DoesNotExist:
             logger.warning("No vault snapshot found. Bootstrapping from genesis config.")
-            engine = ValuationEngine.from_genesis(prices)
+            engine   = ValuationEngine.from_genesis(prices)
+            holdings = []   # Day 0: vault is pure cash
 
-        state = engine.calculate_nav(prices)
-        return Decimal(str(round(state.nav_inr, 4)))
+        state = engine.calculate_nav(holdings, prices)
+        return Decimal(str(round(float(state.nav_inr), 4)))
 
     def _fetch_prices(self):
         """Fetch current prices from the Oracle."""

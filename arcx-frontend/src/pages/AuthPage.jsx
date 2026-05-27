@@ -174,26 +174,26 @@ function OnboardingCarousel() {
         </div>
 
         {/* Slide 3: Why Use ARCX */}
-        <div className={`absolute inset-0 flex flex-col items-center justify-center transition-opacity duration-1000 ${currentSlide === 2 ? 'opacity-100 z-10' : 'opacity-0 z-0'}`}>
-          <div className="w-full max-w-md space-y-4 mb-12">
+        <div className={`absolute inset-0 flex flex-col items-center justify-center transition-opacity duration-1000 ${currentSlide === 2 ? 'opacity-100 z-10' : 'opacity-0 z-0'} w-full px-8 lg:px-12`}>
+          <div className="text-center mb-12 z-10">
+            <h1 className="font-display text-4xl font-semibold text-[#1D1D1F] dark:text-[#F5F5F7] mb-4">Start Your Journey</h1>
+            <p className="text-slate-600 dark:text-slate-400 text-lg">Join thousands growing their wealth with ARCX.</p>
+          </div>
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-6 w-full max-w-5xl z-10">
             {[
-              { icon: BarChart2, color: 'text-arcx-green', bg: 'bg-arcx-green/10', title: 'Beat Inflation', sub: 'Your wealth grows automatically, every single day.' },
+              { icon: BarChart2, color: 'text-[#30D158]', bg: 'bg-[#30D158]/10', title: 'Beat Inflation', sub: 'Your wealth grows automatically, every single day.' },
               { icon: ShieldCheck, color: 'text-[#0A84FF]', bg: 'bg-[#0A84FF]/10', title: 'Zero Volatility', sub: 'Gold & bonds protect you from market crashes.' },
               { icon: CreditCard, color: 'text-arcx-gold', bg: 'bg-arcx-gold/10', title: 'Spend Like Cash', sub: 'Use anywhere UPI is accepted — instant & free.' },
             ].map((f, i) => (
-              <div key={i} className="flex items-center gap-5 p-5 rounded-[24px] glassContainer border border-black/5 dark:border-white/5">
-                <div className={`w-14 h-14 rounded-2xl flex items-center justify-center z-10 ${f.bg}`}>
-                  <f.icon size={24} className={f.color} />
+              <div key={i} className="flex flex-col items-center text-center p-8 rounded-[32px] glassContainer border border-black/5 dark:border-white/5 hover:-translate-y-2 transition-transform duration-300">
+                <div className={`w-16 h-16 rounded-2xl flex items-center justify-center mb-6 ${f.bg}`}>
+                  <f.icon size={32} className={f.color} />
                 </div>
-                <div className="z-10">
-                  <h3 className="text-[#1D1D1F] dark:text-[#F5F5F7] font-semibold text-lg mb-1">{f.title}</h3>
-                  <p className="text-slate-600 dark:text-slate-400 text-sm leading-relaxed">{f.sub}</p>
-                </div>
+                <h3 className="text-[#1D1D1F] dark:text-[#F5F5F7] font-semibold text-xl mb-3">{f.title}</h3>
+                <p className="text-slate-600 dark:text-slate-400 text-sm leading-relaxed">{f.sub}</p>
               </div>
             ))}
           </div>
-          <h1 className="font-display text-4xl font-semibold text-[#1D1D1F] dark:text-[#F5F5F7] mb-4 z-10">Start Your Journey</h1>
-          <p className="text-slate-600 dark:text-slate-400 text-center z-10">Join thousands growing their wealth with ARCX.</p>
         </div>
       </div>
 

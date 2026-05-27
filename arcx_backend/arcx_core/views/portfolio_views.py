@@ -1,5 +1,5 @@
 """
-ARCX Portfolio Analytics View — Phase 10
+ARCX Portfolio Analytics View - Phase 10
 ------------------------------------------
 GET /api/v1/portfolio/analytics
 """
@@ -9,13 +9,78 @@ import logging
 from rest_framework.views import APIView
 from rest_framework.response import Response
 from rest_framework.permissions import IsAuthenticated
+from rest_framework import serializers as drf_serializers
+from drf_spectacular.utils import extend_schema, OpenApiResponse, inline_serializer
 
-from arcx_core.models import User as ArcxUser, Wallet, Transaction, NAVHistory, VaultSnapshot
+from arcx_core.models import User as ArcxUser, Wallet, Transaction, NAVHistory, VaultSnapshot, VaultAssetHolding
 from arcx_core.views.wallet_views import _user_id
 from domain.oracle import MultiSourceOracle, OracleFailureException
 from domain.valuation import ValuationEngine
 
 logger = logging.getLogger("arcx.views.portfolio")
+
+# -- Inline schemas -----------------------------------------------------------
+_ErrorSchema = inline_serializer(
+    name="PortfolioErrorResponse",
+    fields={
+        "error":   drf_serializers.CharField(),
+        "user_id": drf_serializers.CharField(required=False),
+    },
+)
+
+_HoldingsSchema = inline_serializer(
+    name="Holdings",
+    fields={
+        "arcx_balance":       drf_serializers.FloatField(help_text="Current ARCX token balance"),
+        "cost_basis_inr":     drf_serializers.FloatField(help_text="Total INR invested (historical cost)"),
+        "current_value_inr":  drf_serializers.FloatField(help_text="Current portfolio value in INR at live NAV"),
+        "unrealized_pnl_inr": drf_serializers.FloatField(help_text="Unrealized profit/loss = current_value - cost_basis"),
+        "pnl_pct":            drf_serializers.FloatField(help_text="P&L as a percentage of cost basis"),
+        "avg_buy_price_inr":  drf_serializers.FloatField(help_text="Average purchase price per ARCX token in INR"),
+        "current_nav_inr":    drf_serializers.FloatField(help_text="Current live NAV used for valuation"),
+    },
+)
+
+_YieldSchema = inline_serializer(
+    name="YieldEarned",
+    fields={
+        "arcx":  drf_serializers.FloatField(help_text="Total ARCX earned through dividends"),
+        "inr":   drf_serializers.FloatField(help_text="INR equivalent of dividends earned"),
+        "count": drf_serializers.IntegerField(help_text="Number of dividend distributions received"),
+    },
+)
+
+_PnLPointSchema = inline_serializer(
+    name="PnLPoint",
+    fields={
+        "date":            drf_serializers.CharField(help_text="Date label e.g. '01 Jun'"),
+        "portfolio_value": drf_serializers.FloatField(help_text="Portfolio value in INR on this date"),
+        "cost_basis":      drf_serializers.FloatField(help_text="Cumulative cost basis in INR on this date"),
+    },
+)
+
+_PortfolioResponseSchema = inline_serializer(
+    name="PortfolioAnalyticsResponse",
+    fields={
+        "holdings": drf_serializers.DictField(
+            help_text=(
+                "Current portfolio snapshot: arcx_balance, cost_basis_inr, "
+                "current_value_inr, unrealized_pnl_inr, pnl_pct, avg_buy_price_inr, current_nav_inr"
+            )
+        ),
+        "yield_earned": drf_serializers.DictField(
+            help_text="Dividend yield totals: arcx (float), inr (float), count (int)"
+        ),
+        "tx_breakdown": drf_serializers.DictField(
+            child=drf_serializers.DictField(child=drf_serializers.FloatField()),
+            help_text="Transaction breakdown by type: {tx_type: {count, total_inr, total_arcx}}",
+        ),
+        "pnl_series":   drf_serializers.ListField(
+            child=drf_serializers.DictField(),
+            help_text="Day-by-day P&L data points: {date, portfolio_value, cost_basis}",
+        ),
+    },
+)
 
 
 class PortfolioAnalyticsView(APIView):
@@ -30,8 +95,8 @@ class PortfolioAnalyticsView(APIView):
     def _get_wallet(self, user_id: str) -> Wallet:
         """
         Resolve wallet robustly for all user types:
-          - Real users:  username = UUID  → ArcxUser.id = UUID
-          - Seed users:  username = UUID  → ArcxUser.id = UUID
+          - Real users:  username = UUID  -> ArcxUser.id = UUID
+          - Seed users:  username = UUID  -> ArcxUser.id = UUID
         Returns the wallet or raises Wallet.DoesNotExist.
         """
         try:
@@ -42,6 +107,26 @@ class PortfolioAnalyticsView(APIView):
         except (ArcxUser.DoesNotExist, Wallet.DoesNotExist, ValueError):
             raise Wallet.DoesNotExist(f"No wallet found for user_id={user_id!r}")
 
+    @extend_schema(
+        tags=["Portfolio"],
+        operation_id="portfolio_analytics",
+        summary="Get portfolio analytics and P&L",
+        description=(
+            "Returns a complete analytics snapshot for the authenticated user's portfolio:\n\n"
+            "- **Holdings** - current balance, cost basis, live value, unrealized P&L, avg buy price\n"
+            "- **Yield earned** - total ARCX and INR earned through dividend distributions\n"
+            "- **Transaction breakdown** - deposit/withdraw/transfer/dividend counts and totals\n"
+            "- **P&L series** - day-by-day portfolio value vs cost basis (powers the chart)\n\n"
+            "The live NAV is fetched from the oracle on every call. If the oracle is unavailable, "
+            "the last known NAV from the vault snapshot is used as a fallback."
+        ),
+        responses={
+            200: _PortfolioResponseSchema,
+            404: OpenApiResponse(response=_ErrorSchema, description="Wallet not found for this user"),
+            500: OpenApiResponse(response=_ErrorSchema, description="Internal error fetching wallet or NAV"),
+            401: OpenApiResponse(response=_ErrorSchema, description="JWT missing or expired"),
+        },
+    )
     def get(self, request):
         user_id = _user_id(request)   # JWT sub = request.user.username
 
@@ -57,17 +142,23 @@ class PortfolioAnalyticsView(APIView):
         arcx_balance = float(wallet.arcx_balance)
         cost_basis   = float(wallet.cost_basis_inr)
 
-        # ── Live NAV ────────────────────────────────────────────────────────
-        current_nav_inr = 0.0
+        # Phase 6: Calculate NAV from actual share quantities (Mark-to-Market)
         try:
             snapshot = VaultSnapshot.objects.latest("snapshot_date")
-            current_nav_inr = float(snapshot.total_value_usd) / float(snapshot.arcx_supply) * float(snapshot.usd_inr_rate)
+            holdings = list(VaultAssetHolding.objects.all())
+            engine   = ValuationEngine(
+                arcx_supply      = float(snapshot.arcx_supply),
+                cash_balance_usd = float(snapshot.cash_value_usd),
+            )
+            oracle  = MultiSourceOracle()
+            prices  = oracle.fetch_prices()
+            current_nav_inr = float(engine.calculate_nav(holdings, prices).nav_inr)
         except VaultSnapshot.DoesNotExist:
             try:
                 oracle = MultiSourceOracle()
                 prices = oracle.fetch_prices()
                 engine = ValuationEngine.from_genesis(prices)
-                current_nav_inr = float(engine.calculate_nav(prices).nav_inr)
+                current_nav_inr = float(engine.calculate_nav([], prices).nav_inr)
             except Exception as e:
                 logger.warning("Could not fetch live NAV for portfolio analytics: %s", e)
                 current_nav_inr = 100.0

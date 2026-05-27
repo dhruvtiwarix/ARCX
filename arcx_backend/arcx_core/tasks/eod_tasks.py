@@ -42,7 +42,8 @@ from domain.valuation import ValuationEngine
 from domain.dividend import DividendAccrualEngine
 from domain.rebalancer import DriftRebalancer
 from domain.nav_report import NAVReportGenerator
-from arcx_core.models import VaultSnapshot, NAVHistory, CircuitBreakerLog
+from arcx_core.services.pseudo_broker import PseudoBrokerService
+from arcx_core.models import VaultSnapshot, NAVHistory, CircuitBreakerLog, VaultAssetHolding
 from arcx_core.logger import arcx_logger
 
 logger = logging.getLogger("arcx.tasks.eod")
@@ -91,24 +92,27 @@ def take_vault_snapshot(self):
         prev_snapshot = VaultSnapshot.objects.exclude(
             snapshot_date=today
         ).latest("snapshot_date")
+        # Phase 6: Load actual share holdings from the ledger
+        holdings = list(VaultAssetHolding.objects.all())
         engine = ValuationEngine(
-            arcx_supply     = float(prev_snapshot.arcx_supply),
-            vault_value_usd = float(prev_snapshot.total_value_usd),
+            arcx_supply      = float(prev_snapshot.arcx_supply),
+            cash_balance_usd = float(prev_snapshot.cash_value_usd),
         )
     except VaultSnapshot.DoesNotExist:
         logger.warning("No previous snapshot found. Bootstrapping from genesis.")
+        holdings = []   # Day 0: vault is pure cash, no shares yet
         engine = ValuationEngine.from_genesis(prices)
 
-    state = engine.calculate_nav(prices)
+    state = engine.calculate_nav(holdings, prices)
 
     try:
         snapshot = VaultSnapshot.objects.create(
             snapshot_date   = today,
-            total_value_usd = Decimal(str(round(state.total_vault_value_usd, 4))),
-            stock_value_usd = Decimal(str(round(state.stock_value_usd, 4))),
-            bond_value_usd  = Decimal(str(round(state.bond_value_usd, 4))),
-            gold_value_usd  = Decimal(str(round(state.gold_value_usd, 4))),
-            cash_value_usd  = Decimal(str(round(state.cash_value_usd, 4))),
+            total_value_usd = Decimal(str(round(float(state.total_vault_value_usd), 4))),
+            stock_value_usd = Decimal(str(round(float(state.stock_value_usd), 4))),
+            bond_value_usd  = Decimal(str(round(float(state.bond_value_usd), 4))),
+            gold_value_usd  = Decimal(str(round(float(state.gold_value_usd), 4))),
+            cash_value_usd  = Decimal(str(round(float(state.cash_balance_usd), 4))),
             arcx_supply     = Decimal(str(round(engine.arcx_supply, 18))),
             spy_twap        = Decimal(str(round(prices.spy, 4))),
             tlt_twap        = Decimal(str(round(prices.tlt, 4))),
@@ -220,56 +224,108 @@ def accrue_daily_dividends(self):
 )
 def run_rebalancing_check(self):
     """
-    Runs at 15:45 IST (15 min after market close snapshot).
-    Checks if any asset has drifted beyond the 3% tolerance band.
-    Logs the required trades. Does NOT execute them (no broker integration yet).
+    Runs at 15:45 IST.
 
-    In a production system, this would submit orders to a broker API.
-    In ARCX Phase 5, it logs the trades and the human/admin executes them.
-    Full broker integration = Phase 6.
+    Phase 5: Generated trade instructions, logged them, did nothing.
+    Phase 7: Generates trade instructions AND executes them via PseudoBrokerService.
+
+    The loop is now closed:
+      User Deposit → Cash influx → EOD Rebalancer → Pseudo-Broker → Holdings Updated
     """
+    from arcx_core.services.pseudo_broker import PseudoBrokerService
+
     today = date.today()
-    logger.info("EOD task started: run_rebalancing_check date=%s", today)
+    logger.info("EOD task started: run_rebalancing_check + execution date=%s", today)
 
     try:
         snapshot = VaultSnapshot.objects.get(snapshot_date=today)
     except VaultSnapshot.DoesNotExist:
-        logger.warning("No snapshot for today in rebalancing check. EOD task may have failed.")
+        logger.warning("No snapshot for today in rebalancing check. Skipping.")
         return {"status": "skipped", "reason": "no_snapshot"}
 
+    # ── Build holdings dict for Rebalancer ───────────────────────────────────
+    # Rebalancer needs: {"SPY": {"value": float, "qty": float}, ...}
+    # We need live prices to calculate current market value of each holding
+
+    try:
+        oracle = MultiSourceOracle()
+        prices = oracle.fetch_prices()
+    except OracleFailureException as exc:
+        raise self.retry(exc=exc)
+
+    live_prices = {
+        "SPY": prices.spy,
+        "TLT": prices.tlt,
+        "GLD": prices.gld,
+    }
+
+    holdings_data = {}
+    for holding in VaultAssetHolding.objects.all():
+        ticker     = holding.asset_ticker
+        qty        = float(holding.total_quantity)
+        live_price = live_prices.get(ticker, 0.0)
+        holdings_data[ticker] = {
+            "value": qty * live_price,
+            "qty":   qty,
+        }
+
+    # ── Run Rebalancer Analysis ───────────────────────────────────────────────
     rebalancer = DriftRebalancer()
     report     = rebalancer.analyze(
-        vault_value_usd = float(snapshot.total_value_usd),
-        stock_value_usd = float(snapshot.stock_value_usd),
-        bond_value_usd  = float(snapshot.bond_value_usd),
-        gold_value_usd  = float(snapshot.gold_value_usd),
-        cash_value_usd  = float(snapshot.cash_value_usd),
+        vault_value_usd  = float(snapshot.total_value_usd),
+        holdings         = holdings_data,
+        cash_balance_usd = float(snapshot.cash_value_usd),
+        live_prices      = live_prices,
     )
 
-    if report.rebalance_needed:
-        logger.warning(
-            "REBALANCE NEEDED: date=%s total_drift=%.2f%% trades=%d",
-            today, report.total_drift * 100, len(report.trades),
-        )
-        for trade in report.trades:
-            logger.warning(
-                "TRADE INSTRUCTION: action=%s asset=%s amount_usd=%.2f reason=%s",
-                trade.action, trade.asset, trade.amount_usd, trade.reason,
-            )
-    else:
+    if not report.rebalance_needed:
         logger.info(
             "Rebalancing not needed: date=%s drift=%.2f%%",
-            today, report.total_drift * 100,
+            today, report.total_drift * 100
         )
+        return {
+            "status":           "ok",
+            "date":             str(today),
+            "rebalance_needed": False,
+            "total_drift_pct":  round(float(report.total_drift) * 100, 2),
+            "trades_executed":  0,
+        }
+
+    logger.warning(
+        "REBALANCE NEEDED: date=%s total_drift=%.2f%% trades=%d",
+        today, float(report.total_drift) * 100, len(report.trades),
+    )
+
+    # ── Execute Trades via Pseudo-Broker ─────────────────────────────────────
+    broker         = PseudoBrokerService()
+    batch_result   = broker.execute_trades(report.trades, snapshot)
+
+    logger.info(
+        "Rebalancing complete: %d/%d trades filled | Cash spent: $%.4f | Cash gained: $%.4f",
+        batch_result.successful_trades,
+        batch_result.total_trades,
+        float(batch_result.total_cash_spent),
+        float(batch_result.total_cash_gained),
+    )
 
     return {
         "status":           "ok",
         "date":             str(today),
-        "rebalance_needed": report.rebalance_needed,
-        "total_drift_pct":  round(report.total_drift * 100, 2),
-        "trades":           [
-            {"action": t.action, "asset": t.asset, "amount_usd": t.amount_usd}
-            for t in report.trades
+        "rebalance_needed": True,
+        "total_drift_pct":  round(float(report.total_drift) * 100, 2),
+        "trades_executed":  batch_result.successful_trades,
+        "trades_failed":    batch_result.failed_trades,
+        "cash_spent_usd":   float(batch_result.total_cash_spent),
+        "orders": [
+            {
+                "ticker":   r.trade.ticker,
+                "action":   r.trade.action,
+                "qty":      float(r.filled_quantity),
+                "price":    float(r.fill_price),
+                "success":  r.success,
+                "error":    r.error,
+            }
+            for r in batch_result.orders
         ],
     }
 
@@ -309,11 +365,13 @@ def publish_daily_nav(self):
     except OracleFailureException as exc:
         raise self.retry(exc=exc)
 
+    # Phase 6: Load actual holdings from the ledger
+    holdings = list(VaultAssetHolding.objects.all())
     engine = ValuationEngine(
-        arcx_supply     = float(snapshot.arcx_supply),
-        vault_value_usd = float(snapshot.total_value_usd),
+        arcx_supply      = float(snapshot.arcx_supply),
+        cash_balance_usd = float(snapshot.cash_value_usd),
     )
-    state = engine.calculate_nav(prices)
+    state = engine.calculate_nav(holdings, prices)
 
     # Calculate today's dividend for the report
     accrual_engine = DividendAccrualEngine()
@@ -324,13 +382,27 @@ def publish_daily_nav(self):
     )
 
     # Generate and save the signed JSON report (Phase 1 nav_report.py)
+    # Phase 6: Build holdings dict for the rebalancer from actual DB holdings
+    holdings_dict  = {}
+    live_prices_dict = {
+        "SPY": float(prices.spy),
+        "TLT": float(prices.tlt),
+        "GLD": float(prices.gld),
+    }
+    for h in holdings:
+        qty = float(h.total_quantity)
+        price = live_prices_dict.get(h.asset_ticker, 0)
+        holdings_dict[h.asset_ticker] = {
+            "value": qty * price,
+            "qty":   qty,
+        }
+
     rebalancer = DriftRebalancer()
     rebalance  = rebalancer.analyze(
-        vault_value_usd = state.total_vault_value_usd,
-        stock_value_usd = state.stock_value_usd,
-        bond_value_usd  = state.bond_value_usd,
-        gold_value_usd  = state.gold_value_usd,
-        cash_value_usd  = state.cash_value_usd,
+        vault_value_usd  = float(state.total_vault_value_usd),
+        holdings         = holdings_dict,
+        cash_balance_usd = float(state.cash_balance_usd),
+        live_prices      = live_prices_dict,
     )
 
     reporter    = NAVReportGenerator()

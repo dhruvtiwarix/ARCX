@@ -1,5 +1,5 @@
 """
-ARCX Database Models — Phase 2
+ARCX Database Models — Phase 6
 --------------------------------
 All tables follow the MNC-grade non-negotiables:
  
@@ -27,6 +27,7 @@ Why Decimal, Not Float?
 """
  
 import uuid
+from decimal import Decimal
 from django.db import models
  
  
@@ -288,6 +289,126 @@ class VaultSnapshot(ArcxBaseModel):
  
     def __str__(self):
         return f"VaultSnapshot({self.snapshot_date}, total=${self.total_value_usd})"
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Vault Asset Holdings (Phase 6 — Quantity-Based Mark-to-Market)
+# ─────────────────────────────────────────────────────────────────────────────
+
+class VaultAssetHolding(ArcxBaseModel):
+    """
+    THE SOURCE OF TRUTH for what ARCX physically holds in the global market.
+
+    WHY THIS TABLE EXISTS:
+      The old system tracked allocations as percentages (40/30/20/10).
+      That model breaks in the real world:
+        - Stock splits: SPY does 2-for-1 → price halves, but old system thinks vault lost 50%.
+        - Corporate actions: dividends, spinoffs cannot be tracked without share counts.
+        - Broker reconciliation: you cannot tell Alpaca "buy 40% worth of SPY".
+          You tell them "buy 14.5 shares of SPY at market price".
+
+      This table stores the EXACT fractional shares the vault holds.
+      Valuation is: quantity * live_price (Mark-to-Market). No more magic math.
+
+    ONE ROW PER ASSET (enforced by unique_asset_ticker):
+      SPY → 14.502394850000000000 shares at avg $530.2500
+      TLT →  9.812456780000000000 shares at avg $94.8000
+      GLD → 12.345678900000000000 shares at avg $184.5000
+
+    Cash (10% slice) is NOT stored here.
+    It lives as cash_value_usd in VaultSnapshot.
+    Cash has no "shares" — it is a USD balance, not a position.
+
+    AVERAGE BUY PRICE:
+      Calculated as a weighted average every time we buy more shares.
+      Formula: new_avg = (old_qty * old_avg + new_qty * new_price) / (old_qty + new_qty)
+      Used for cost-basis reporting and P&L analytics. NOT used for NAV calculation.
+      NAV only uses: quantity * live_price (current market value, not what we paid).
+    """
+
+    class AssetTicker(models.TextChoices):
+        SPY = "SPY", "S&P 500 ETF (Stocks)"
+        TLT = "TLT", "20+ Year Treasury ETF (Bonds)"
+        GLD = "GLD", "Gold ETF"
+
+    asset_ticker = models.CharField(
+        max_length=10,
+        unique=True,                   # One row per asset — enforced at DB level
+        choices=AssetTicker.choices,
+        db_index=True,
+    )
+    total_quantity = models.DecimalField(
+        max_digits=28,
+        decimal_places=18,             # 18 decimals = fractional share precision (matches wallets)
+        default=Decimal("0"),
+        help_text="Total fractional shares held. e.g. 14.502394850000000000"
+    )
+    average_buy_price = models.DecimalField(
+        max_digits=20,
+        decimal_places=4,
+        default=Decimal("0"),
+        help_text="Weighted average purchase price in USD. Used for cost-basis analytics, NOT for NAV."
+    )
+
+    class Meta:
+        db_table = "vault_asset_holdings"
+        verbose_name        = "Vault Asset Holding"
+        verbose_name_plural = "Vault Asset Holdings"
+
+    def update_on_buy(self, new_quantity: Decimal, execution_price: Decimal):
+        """
+        Updates quantity and recalculates weighted average buy price.
+
+        Call this after EVERY broker execution (buy order fill).
+        This is the ONLY correct way to update holdings — never set fields directly.
+
+        Args:
+            new_quantity:    Fractional shares purchased (e.g., Decimal("0.0096"))
+            execution_price: Price per share at execution (e.g., Decimal("500.00"))
+
+        Weighted average formula:
+            new_avg = (old_qty * old_avg + new_qty * exec_price) / (old_qty + new_qty)
+        """
+        if new_quantity <= 0:
+            raise ValueError("new_quantity must be positive for a buy.")
+        if execution_price <= 0:
+            raise ValueError("execution_price must be positive.")
+
+        old_qty   = self.total_quantity
+        old_avg   = self.average_buy_price
+        new_total = old_qty + new_quantity
+
+        # Weighted average prevents distortion when buying at different price points
+        if new_total > 0:
+            new_avg = ((old_qty * old_avg) + (new_quantity * execution_price)) / new_total
+        else:
+            new_avg = execution_price
+
+        self.total_quantity    = new_total
+        self.average_buy_price = new_avg.quantize(Decimal("0.0001"))
+
+    def update_on_sell(self, sell_quantity: Decimal):
+        """
+        Reduces quantity on a sell/rebalance-out order.
+        Average buy price does NOT change on sells (FIFO/avg-cost industry standard).
+
+        Args:
+            sell_quantity: Fractional shares sold (must be a positive number)
+        """
+        if sell_quantity <= 0:
+            raise ValueError("sell_quantity must be positive.")
+        if sell_quantity > self.total_quantity:
+            raise ValueError(
+                f"Cannot sell {sell_quantity} shares of {self.asset_ticker}. "
+                f"Only {self.total_quantity} held."
+            )
+        self.total_quantity -= sell_quantity
+
+    def __str__(self):
+        return (
+            f"{self.asset_ticker}: {self.total_quantity} shares "
+            f"@ avg ${self.average_buy_price}"
+        )
  
  
 # ─────────────────────────────────────────────────────────────────────────────

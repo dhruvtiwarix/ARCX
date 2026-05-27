@@ -186,7 +186,7 @@ class MultiSourceOracle:
         self.twelve = TwelveDataSource()
 
     def fetch_prices(self) -> MarketPrices:
-        print(Fore.CYAN + "\n  ── Oracle: Fetching Multi-Source TWAP Prices ───")
+        print(Fore.CYAN + "\n  -- Oracle: Fetching Multi-Source TWAP Prices ---")
         sources_used = []
 
         spy_readings = self._fetch_asset("SPY", "stocks", sources_used)
@@ -247,7 +247,7 @@ class MultiSourceOracle:
         return round(statistics.median([r[1] for r in readings]), 4)
 
     def _print_summary(self, spy_r, tlt_r, gld_r, spy, tlt, gld, usd_inr, sources):
-        print(Fore.YELLOW + "\n  ── Raw TWAP Readings per Source ────────────────")
+        print(Fore.YELLOW + "\n  -- Raw TWAP Readings per Source ----------------")
         self._print_asset("SPY (Stocks)", spy_r, spy)
         self._print_asset("TLT (Bonds) ", tlt_r, tlt)
         self._print_asset("GLD (Gold)  ", gld_r, gld)
