@@ -158,6 +158,10 @@ class Wallet(ArcxBaseModel):
     arcx_balance   = models.DecimalField(max_digits=28, decimal_places=18, default=0)
     cost_basis_inr = models.DecimalField(max_digits=20, decimal_places=4, default=0)
     is_frozen      = models.BooleanField(default=False, db_index=True)
+    transaction_pin = models.CharField(
+        max_length=128, null=True, blank=True,
+        help_text="Hashed UPI-style PIN for authorizing B2B transfers."
+    )
  
     objects = WalletManager()
  
@@ -450,51 +454,49 @@ class NAVHistory(ArcxBaseModel):
 class KYCRecord(ArcxBaseModel):
     """
     KYC verification history for a user.
-    Multiple records per user = KYC upgrade trail (Basic → Full → Accredited).
- 
-    KYC Tiers:
-      tier_1 → Phone + Aadhaar OTP. Limit: ₹10,000/day
-      tier_2 → PAN + Selfie. Limit: ₹1,00,000/day
-      tier_3 → Full address proof. Limit: Unlimited
- 
-    document_ref: External ID from your KYC provider (e.g., DigiLocker, Onfido).
-    Do NOT store the actual document. Store only the reference.
-    Actual documents live in encrypted object storage (S3/GCS), never in PG.
+    Single step KYC requires PAN number only.
     """
- 
-    class Tier(models.TextChoices):
-        TIER_1 = "tier_1", "Tier 1 — Basic"
-        TIER_2 = "tier_2", "Tier 2 — Standard"
-        TIER_3 = "tier_3", "Tier 3 — Full"
- 
+
     class Status(models.TextChoices):
         PENDING  = "pending",  "Pending Review"
         APPROVED = "approved", "Approved"
         REJECTED = "rejected", "Rejected"
- 
-    class DocumentType(models.TextChoices):
-        AADHAAR  = "aadhaar",  "Aadhaar Card"
-        PAN      = "pan",      "PAN Card"
-        PASSPORT = "passport", "Passport"
-        DL       = "dl",       "Driving License"
- 
+
     user          = models.ForeignKey(
         User, on_delete=models.PROTECT, related_name="kyc_records"
     )
-    tier          = models.CharField(max_length=10, choices=Tier.choices, db_index=True)
-    status        = models.CharField(max_length=10, choices=Status.choices, db_index=True)
-    document_type = models.CharField(max_length=20, choices=DocumentType.choices)
-    document_ref  = models.CharField(max_length=255)   # External reference only
+    status        = models.CharField(max_length=10, choices=Status.choices, default=Status.PENDING, db_index=True)
+    pan_number    = models.CharField(max_length=10, help_text="10-character alphanumeric PAN")
     verified_at   = models.DateTimeField(null=True, blank=True)
- 
+
     class Meta:
         db_table = "kyc_records"
         indexes  = [
-            models.Index(fields=["user", "tier", "status"]),
+            models.Index(fields=["user", "status"]),
         ]
- 
+
     def __str__(self):
-        return f"KYC(user={self.user_id}, tier={self.tier}, status={self.status})"
+        return f"KYC(user={self.user_id}, status={self.status}, pan={self.pan_number})"
+
+
+class OTPVerification(ArcxBaseModel):
+    """
+    Temporary OTP codes sent via email for password/PIN resets.
+    """
+    user       = models.ForeignKey(User, on_delete=models.CASCADE, related_name="otps")
+    code       = models.CharField(max_length=6)
+    purpose    = models.CharField(max_length=20, default="PIN_RESET")
+    expires_at = models.DateTimeField()
+    is_used    = models.BooleanField(default=False)
+
+    class Meta:
+        db_table = "otp_verifications"
+        indexes = [
+            models.Index(fields=["user", "purpose", "is_used"]),
+        ]
+
+    def __str__(self):
+        return f"OTP({self.user.email}, {self.purpose}, used={self.is_used})"
  
  
 # ─────────────────────────────────────────────────────────────────────────────
@@ -553,4 +555,68 @@ class CircuitBreakerLog(ArcxBaseModel):
     def __str__(self):
         status = "ACTIVE" if self.resolved_at is None else "RESOLVED"
         return f"CircuitBreaker({self.tier}, {self.event_type}, {status})"
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# B2B Transactions (Phase 8 - UPI Style)
+# ─────────────────────────────────────────────────────────────────────────────
+
+class BusinessAlias(ArcxBaseModel):
+    """
+    Virtual Payment Address (VPA) for businesses.
+    Example: 'vendorA@arcx'
+    Maps to an actual User, abstracting away complex account details.
+    """
+    user  = models.ForeignKey(User, on_delete=models.PROTECT, related_name="aliases")
+    alias = models.CharField(max_length=100, unique=True, db_index=True, help_text="e.g. supplier@arcx")
+
+    class Meta:
+        db_table = "business_aliases"
+
+    def __str__(self):
+        return f"{self.alias} -> {self.user.email}"
+
+
+class WebhookEndpoint(ArcxBaseModel):
+    """
+    A URL registered by a business to receive real-time notifications when
+    they receive ARCX tokens (Callback/Webhook).
+    """
+    user       = models.OneToOneField(User, on_delete=models.CASCADE, related_name="webhook_config")
+    url        = models.URLField(max_length=500)
+    secret_key = models.CharField(max_length=128, help_text="Used to sign webhook payloads for security.")
+    is_active  = models.BooleanField(default=True)
+
+    class Meta:
+        db_table = "webhook_endpoints"
+
+    def __str__(self):
+        return f"Webhook(user={self.user_id}, url={self.url})"
+
+
+class WebhookDelivery(ArcxBaseModel):
+    """
+    Audit log of webhook delivery attempts.
+    Crucial for B2B reliability and retries.
+    """
+    class Status(models.TextChoices):
+        PENDING = "pending", "Pending"
+        SUCCESS = "success", "Success"
+        FAILED  = "failed",  "Failed"
+
+    endpoint         = models.ForeignKey(WebhookEndpoint, on_delete=models.CASCADE, related_name="deliveries")
+    transaction_id   = models.UUIDField(db_index=True, help_text="ID of the related ARCX Transaction")
+    payload          = models.JSONField()
+    status           = models.CharField(max_length=20, choices=Status.choices, default=Status.PENDING, db_index=True)
+    http_status_code = models.IntegerField(null=True, blank=True)
+    response_body    = models.TextField(null=True, blank=True)
+    attempt_count    = models.IntegerField(default=0)
+
+    class Meta:
+        db_table = "webhook_deliveries"
+        ordering = ["-created_at"]
+
+    def __str__(self):
+        return f"Delivery({self.transaction_id}, {self.status})"
+
  

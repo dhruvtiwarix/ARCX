@@ -256,3 +256,140 @@ class LogoutView(APIView):
                 {"error": "Invalid or expired refresh token.", "code": "INVALID_TOKEN"},
                 status=status.HTTP_400_BAD_REQUEST,
             )
+
+import random
+from django.core.mail import send_mail
+from django.utils import timezone
+from datetime import timedelta
+from arcx_core.models import OTPVerification
+from arcx_core.services.b2b_service import B2BService
+from arcx_core.serializers_auth import ResetPinRequestSerializer
+
+class ForgotPinView(APIView):
+    """
+    POST /api/v1/auth/forgot-pin
+    Generates a 6-digit OTP and sends it via email.
+    """
+    permission_classes = [IsAuthenticated]
+
+    @extend_schema(
+        tags=["Auth"],
+        summary="Forgot PIN (Send OTP)",
+        responses={200: inline_serializer("ForgotPinSuccess", {"message": drf_serializers.CharField()})}
+    )
+    def post(self, request):
+        user_id = request.user.username
+        try:
+            from arcx_core.models import User
+            user = User.objects.get(id=user_id)
+        except User.DoesNotExist:
+            return Response({"error": "User not found.", "code": "USER_NOT_FOUND"}, status=status.HTTP_404_NOT_FOUND)
+        
+        # Invalidate old OTPs for this purpose
+        OTPVerification.objects.filter(user=user, purpose="PIN_RESET", is_used=False).update(is_used=True)
+        
+        # Generate 6 digit OTP
+        otp_code = str(random.randint(100000, 999999))
+        
+        OTPVerification.objects.create(
+            user=user,
+            code=otp_code,
+            purpose="PIN_RESET",
+            expires_at=timezone.now() + timedelta(minutes=15)
+        )
+        html_content = f"""<div style="background-color: #f5f5f7; padding: 40px; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;">
+    <div style="max-width: 400px; margin: 0 auto; background: #ffffff; border-radius: 32px; padding: 32px; box-shadow: 0 8px 30px rgba(0,0,0,0.04);">
+        <table width="100%" cellpadding="0" cellspacing="0" style="margin-bottom: 24px;">
+            <tr>
+                <td align="left">
+                    <div style="width: 48px; height: 48px; border-radius: 50%; border: 1px solid #e2e8f0; display: inline-block; text-align: center; line-height: 48px; padding: 4px; box-sizing: border-box;">
+                        <div style="width: 100%; height: 100%; background-color: #ef4444; border-radius: 50%; display: inline-block;"></div>
+                    </div>
+                </td>
+                <td align="right">
+                    <div style="background-color: #f1f5f9; border-radius: 20px; padding: 6px 12px; font-size: 11px; font-weight: 600; color: #475569; display: inline-block;">
+                        Secure 🛡️
+                    </div>
+                </td>
+            </tr>
+        </table>
+        <div style="margin-bottom: 16px;">
+            <div style="font-size: 12px; color: #64748b; font-weight: 500; margin-bottom: 4px;">ARCX Security &bull; Just now</div>
+            <h3 style="margin: 0; font-size: 24px; font-weight: 700; color: #1e293b;">Reset Transaction PIN</h3>
+        </div>
+        <div style="margin-bottom: 24px;">
+            <span style="background-color: #f1f5f9; border-radius: 20px; padding: 4px 12px; font-size: 11px; font-weight: 600; color: #475569; margin-right: 8px; display: inline-block;">Email OTP</span>
+            <span style="background-color: #f1f5f9; border-radius: 20px; padding: 4px 12px; font-size: 11px; font-weight: 600; color: #475569; display: inline-block;">Valid 15m</span>
+        </div>
+        <div style="height: 1px; background-color: #f1f5f9; margin-bottom: 24px;"></div>
+        <table width="100%" cellpadding="0" cellspacing="0">
+            <tr>
+                <td align="left" valign="middle">
+                    <div style="font-size: 28px; font-weight: 800; color: #1e293b; letter-spacing: 2px;">{otp_code}</div>
+                    <div style="font-size: 11px; color: #64748b; margin-top: 2px;">Do not share this code</div>
+                </td>
+            </tr>
+        </table>
+    </div>
+</div>"""
+        
+        # Send Email
+        try:
+            send_mail(
+                subject="ARCX - Your PIN Reset OTP",
+                message=f"Your OTP to reset your transaction PIN is: {otp_code}\nThis OTP is valid for 15 minutes.",
+                from_email=None,  # Uses DEFAULT_FROM_EMAIL
+                recipient_list=[user.email],
+                fail_silently=False,
+                html_message=html_content
+            )
+            logger.info(f"OTP email sent to {user.email}")
+        except Exception as e:
+            logger.error(f"Failed to send OTP email to {user.email}: {e}")
+            return Response({"error": "Failed to send email.", "code": "EMAIL_FAILED"}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+        return Response({"message": "OTP sent to your registered email."}, status=status.HTTP_200_OK)
+
+
+class ResetPinView(APIView):
+    """
+    POST /api/v1/auth/reset-pin
+    Validates the OTP and sets a new PIN.
+    """
+    permission_classes = [IsAuthenticated]
+
+    @extend_schema(
+        tags=["Auth"],
+        summary="Reset PIN (Validate OTP)",
+        request=ResetPinRequestSerializer,
+        responses={200: inline_serializer("ResetPinSuccess", {"message": drf_serializers.CharField()})}
+    )
+    def post(self, request):
+        user_id = request.user.username
+        try:
+            from arcx_core.models import User
+            user = User.objects.get(id=user_id)
+        except User.DoesNotExist:
+            return Response({"error": "User not found.", "code": "USER_NOT_FOUND"}, status=status.HTTP_404_NOT_FOUND)
+
+        serializer = ResetPinRequestSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        
+        data = serializer.validated_data
+        
+        otp_record = OTPVerification.objects.filter(
+            user=user,
+            purpose="PIN_RESET",
+            is_used=False,
+            expires_at__gt=timezone.now()
+        ).order_by("-created_at").first()
+        
+        if not otp_record or otp_record.code != data["otp"]:
+            return Response({"error": "Invalid or expired OTP.", "code": "INVALID_OTP"}, status=status.HTTP_400_BAD_REQUEST)
+        
+        otp_record.is_used = True
+        otp_record.save()
+        
+        B2BService.set_transaction_pin(user, data["new_pin"])
+        
+        return Response({"message": "Transaction PIN has been reset successfully."}, status=status.HTTP_200_OK)

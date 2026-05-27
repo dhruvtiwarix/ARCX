@@ -32,7 +32,7 @@ Full endpoint map after Phase 6:
 
 from django.urls import path
 
-from arcx_core.views.auth_views     import RegisterView, MeView, LogoutView
+from arcx_core.views.auth_views     import RegisterView, MeView, LogoutView, ForgotPinView, ResetPinView
 from arcx_core.views.kyc_views      import KYCSubmitView, KYCStatusView
 from arcx_core.views.wallet_views   import (
     WalletBalanceView, DepositView, WithdrawView, TransactionHistoryView
@@ -40,6 +40,7 @@ from arcx_core.views.wallet_views   import (
 from arcx_core.views.oracle_views   import LivePriceView, NAVHistoryView, TodayNAVView
 from arcx_core.views.transfer_views import TransferView
 from arcx_core.views.portfolio_views import PortfolioAnalyticsView
+from arcx_core.views.b2b_views import B2BTransferView, WebhookConfigView, SetTransactionPinView
 from arcx_core.views.admin_views import (
     AdminUserListView, AdminKYCView, AdminNAVComputerView
 )
@@ -49,6 +50,8 @@ urlpatterns = [
     path("auth/register",   RegisterView.as_view(), name="auth_register"),
     path("auth/me",         MeView.as_view(),       name="auth_me"),
     path("auth/logout",     LogoutView.as_view(),   name="auth_logout"),
+    path("auth/forgot-pin", ForgotPinView.as_view(),name="auth_forgot_pin"),
+    path("auth/reset-pin",  ResetPinView.as_view(), name="auth_reset_pin"),
 
     # ── KYC ──────────────────────────────────────────────────────────────
     path("kyc/submit",      KYCSubmitView.as_view(),  name="kyc_submit"),
@@ -75,4 +78,9 @@ urlpatterns = [
     path("admin/users",       AdminUserListView.as_view(),      name="admin_users"),
     path("admin/kyc",         AdminKYCView.as_view(),           name="admin_kyc"),
     path("admin/nav/compute", AdminNAVComputerView.as_view(),   name="admin_nav_compute"),
+
+    # ── B2B (UPI Style) ───────────────────────────────────────────────────
+    path("b2b/transfer/",     B2BTransferView.as_view(),        name="b2b_transfer"),
+    path("b2b/webhooks/",     WebhookConfigView.as_view(),      name="b2b_webhooks"),
+    path("b2b/set-pin/",      SetTransactionPinView.as_view(),  name="b2b_set_pin"),
 ]

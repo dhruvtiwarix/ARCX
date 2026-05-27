@@ -41,6 +41,7 @@ class DepositRequestSerializer(serializers.Serializer):
         decimal_places=2,
         min_value=Decimal("100.00"),
     )
+    pin = serializers.CharField(max_length=6, min_length=6, help_text="Your 6-digit transaction PIN")
 
     def validate_amount_inr(self, value):
         # Extra check: reject values with too many decimal places for INR
@@ -61,6 +62,7 @@ class WithdrawRequestSerializer(serializers.Serializer):
         decimal_places=18,
         min_value=Decimal("0.01"),
     )
+    pin = serializers.CharField(max_length=6, min_length=6, help_text="Your 6-digit transaction PIN")
 
 
 class WalletResponseSerializer(serializers.ModelSerializer):
@@ -139,6 +141,7 @@ class TransferRequestSerializer(serializers.Serializer):
         decimal_places=18,
         min_value=Decimal("0.000001"),
     )
+    pin = serializers.CharField(max_length=6, min_length=6, help_text="Your 6-digit transaction PIN")
     note = serializers.CharField(max_length=140, required=False, allow_blank=True)
 
     def validate_to_user_email(self, value):

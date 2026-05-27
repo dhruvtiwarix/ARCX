@@ -35,6 +35,7 @@ from drf_spectacular.utils import (
 
 from arcx_core.serializers_auth import KYCSubmitSerializer
 from arcx_core.services.kyc_service import KYCService, KYCAlreadyApprovedError
+from arcx_core.services.b2b_service import B2BService
 
 logger = logging.getLogger("arcx.views.kyc")
 
@@ -56,7 +57,6 @@ _KYCSubmitResponseSchema = inline_serializer(
     name="KYCSubmitResponse",
     fields={
         "kyc_id":      drf_serializers.UUIDField(help_text="Unique ID of the KYC record"),
-        "tier":        drf_serializers.CharField(help_text="KYC tier that was approved: tier_1, tier_2, or tier_3"),
         "status":      drf_serializers.CharField(help_text="Status of this KYC record: approved, pending, or rejected"),
         "verified_at": drf_serializers.DateTimeField(allow_null=True),
         "message":     drf_serializers.CharField(help_text="Human-readable summary of the approval with daily limit"),
@@ -67,9 +67,8 @@ _KYCRecordItemSchema = inline_serializer(
     name="KYCRecordItem",
     fields={
         "id":            drf_serializers.UUIDField(),
-        "tier":          drf_serializers.CharField(),
         "status":        drf_serializers.CharField(),
-        "document_type": drf_serializers.CharField(),
+        "pan_number":    drf_serializers.CharField(),
         "verified_at":   drf_serializers.DateTimeField(allow_null=True),
         "submitted_at":  drf_serializers.DateTimeField(),
     },
@@ -82,7 +81,7 @@ _KYCStatusResponseSchema = inline_serializer(
         "highest_tier":    drf_serializers.CharField(allow_null=True, help_text="Highest approved KYC tier"),
         "daily_limit_inr": drf_serializers.CharField(help_text="Current daily transaction limit based on KYC tier"),
         "records":         drf_serializers.ListField(
-            child=drf_serializers.DictField(help_text="KYC record: id, tier, status, document_type, verified_at, submitted_at"),
+            child=drf_serializers.DictField(help_text="KYC record: id, status, pan_number, verified_at, submitted_at"),
             help_text="All KYC submissions for this user",
         ),
     },
@@ -95,18 +94,16 @@ class KYCSubmitView(APIView):
 
     Body:
       {
-        "tier":          "tier_1",
-        "document_type": "aadhaar",
-        "document_ref":  "DIGILOCKER_REF_ABC123"
+        "pan_number": "ABCDE1234F",
+        "pin":        "123456"
       }
 
     Response:
       {
         "kyc_id":      "uuid...",
-        "tier":        "tier_1",
         "status":      "approved",
         "verified_at": "2025-06-01T15:30:00Z",
-        "message":     "KYC tier_1 approved. You can now deposit up to Rs.10,000/day."
+        "message":     "KYC approved. You can now transact with Unlimited limit."
       }
     """
     permission_classes = [IsAuthenticated]
@@ -116,15 +113,7 @@ class KYCSubmitView(APIView):
         operation_id="kyc_submit",
         summary="Submit KYC document for verification",
         description=(
-            "Submits a KYC document reference for verification. ARCX stores only the "
-            "external reference ID returned by the KYC provider (DigiLocker, Onfido, etc.) — "
-            "never the raw document itself.\n\n"
-            "**Tier limits:**\n"
-            "- `tier_1` (Aadhaar/DL) → ₹10,000/day\n"
-            "- `tier_2` (PAN/Passport) → ₹1,00,000/day\n"
-            "- `tier_3` (Full address proof) → Unlimited\n\n"
-            "**Demo:** Pass any string as `document_ref` (e.g. `DEMO_REF_001`) "
-            "to test the flow without a real KYC provider."
+            "Submits a PAN number for verification. This unlocks unlimited transaction limits."
         ),
         request=KYCSubmitSerializer,
         responses={
@@ -139,17 +128,16 @@ class KYCSubmitView(APIView):
                     )
                 ],
             ),
-            400: OpenApiResponse(response=_ErrorSchema, description="Validation error — invalid tier/document_type combination"),
+            400: OpenApiResponse(response=_ErrorSchema, description="Validation error — invalid PAN"),
             401: OpenApiResponse(response=_ErrorSchema, description="JWT missing or expired"),
         },
         examples=[
             OpenApiExample(
-                "Tier 1 Aadhaar submission",
+                "PAN submission",
                 request_only=True,
                 value={
-                    "tier":          "tier_1",
-                    "document_type": "aadhaar",
-                    "document_ref":  "DIGILOCKER_REF_ABC123",
+                    "pan_number": "ABCDE1234F",
+                    "pin":        "123456",
                 },
             ),
             OpenApiExample(
@@ -158,10 +146,9 @@ class KYCSubmitView(APIView):
                 status_codes=["201"],
                 value={
                     "kyc_id":      "3fa85f64-5717-4562-b3fc-2c963f66afa6",
-                    "tier":        "tier_1",
                     "status":      "approved",
                     "verified_at": "2025-06-01T15:30:00Z",
-                    "message":     "KYC tier_1 approved. You can now transact up to Rs.10,000/day.",
+                    "message":     "KYC approved. You can now transact with Unlimited limits.",
                 },
             ),
         ],
@@ -175,10 +162,8 @@ class KYCSubmitView(APIView):
         try:
             service = KYCService()
             kyc     = service.submit(
-                user_id       = _user_id(request),
-                tier          = data["tier"],
-                document_type = data["document_type"],
-                document_ref  = data["document_ref"],
+                user_id    = _user_id(request),
+                pan_number = data["pan_number"],
             )
         except KYCAlreadyApprovedError as e:
             return Response(
@@ -186,22 +171,16 @@ class KYCSubmitView(APIView):
                 status=status.HTTP_409_CONFLICT,
             )
 
-        daily_limits = {
-            "tier_1": "Rs.10,000",
-            "tier_2": "Rs.1,00,000",
-            "tier_3": "Unlimited",
-        }
-        limit = daily_limits.get(kyc.tier, "")
+        # Set the PIN since KYC was successfully created
+        B2BService.set_transaction_pin(request.user, data["pin"])
 
         return Response(
             {
                 "kyc_id":      str(kyc.id),
-                "tier":        kyc.tier,
                 "status":      kyc.status,
                 "verified_at": kyc.verified_at.isoformat() if kyc.verified_at else None,
                 "message":     (
-                    f"KYC {kyc.tier} approved. "
-                    f"You can now transact up to {limit}/day."
+                    "KYC approved. You can now transact with Unlimited limits."
                 ),
             },
             status=status.HTTP_201_CREATED,
@@ -252,14 +231,13 @@ class KYCStatusView(APIView):
                 status_codes=["200"],
                 value={
                     "kyc_status":      "approved",
-                    "highest_tier":    "tier_1",
-                    "daily_limit_inr": "Rs.10,000",
+                    "highest_tier":    "approved",
+                    "daily_limit_inr": "Unlimited",
                     "records": [
                         {
                             "id":            "3fa85f64-5717-4562-b3fc-2c963f66afa6",
-                            "tier":          "tier_1",
                             "status":        "approved",
-                            "document_type": "aadhaar",
+                            "pan_number":    "ABCDE1234F",
                             "verified_at":   "2025-06-01T15:30:00Z",
                             "submitted_at":  "2025-06-01T15:29:50Z",
                         }

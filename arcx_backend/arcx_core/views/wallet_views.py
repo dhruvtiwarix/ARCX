@@ -35,6 +35,7 @@ from arcx_core.serializers import (
     TransactionResponseSerializer,
 )
 from arcx_core.services.wallet_service import WalletService
+from arcx_core.services.b2b_service import B2BService
 
 logger = logging.getLogger("arcx.views.wallet")
 
@@ -197,10 +198,13 @@ class DepositView(APIView):
         serializer = DepositRequestSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
 
+        data = serializer.validated_data
+        B2BService.validate_transaction_pin(request.user, data["pin"])
+
         service = WalletService()
         tx      = service.deposit(
             user_id    = _user_id(request),
-            amount_inr = serializer.validated_data["amount_inr"],
+            amount_inr = data["amount_inr"],
         )
 
         wallet = service.get_wallet(_user_id(request))
@@ -285,10 +289,13 @@ class WithdrawView(APIView):
         serializer = WithdrawRequestSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
 
+        data = serializer.validated_data
+        B2BService.validate_transaction_pin(request.user, data["pin"])
+
         service = WalletService()
         tx      = service.withdraw(
             user_id     = _user_id(request),
-            amount_arcx = serializer.validated_data["amount_arcx"],
+            amount_arcx = data["amount_arcx"],
         )
 
         wallet = service.get_wallet(_user_id(request))

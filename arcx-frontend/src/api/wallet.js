@@ -17,13 +17,14 @@ export async function getBalance() {
  * Deposit INR into the wallet.
  * Includes an Idempotency-Key header to prevent duplicate processing.
  * @param {string} amount_inr — monetary value as a string (e.g. "500.00")
+ * @param {string} pin — 6-digit transaction PIN
  * @returns {Promise<object>}
  */
-export async function deposit(amount_inr) {
+export async function deposit(amount_inr, pin) {
   try {
     const { data } = await client.post(
       '/api/v1/wallet/deposit',
-      { amount_inr },
+      { amount_inr, pin },
       { headers: { 'Idempotency-Key': crypto.randomUUID() } },
     );
     return data;
@@ -36,13 +37,14 @@ export async function deposit(amount_inr) {
  * Withdraw ARCX tokens from the wallet.
  * Includes an Idempotency-Key header to prevent duplicate processing.
  * @param {string} amount_arcx — token quantity as a string (e.g. "10.5000")
+ * @param {string} pin — 6-digit transaction PIN
  * @returns {Promise<object>}
  */
-export async function withdraw(amount_arcx) {
+export async function withdraw(amount_arcx, pin) {
   try {
     const { data } = await client.post(
       '/api/v1/wallet/withdraw',
-      { amount_arcx },
+      { amount_arcx, pin },
       { headers: { 'Idempotency-Key': crypto.randomUUID() } },
     );
     return data;
@@ -67,10 +69,10 @@ export async function getHistory(limit = 20) {
   }
 }
 
-export async function transfer(payload) {
+export async function transfer(payload, idempotencyKey) {
   try {
     const { data } = await client.post('/api/v1/transfer/', payload, {
-      headers: { 'Idempotency-Key': crypto.randomUUID() },
+      headers: { 'Idempotency-Key': idempotencyKey || crypto.randomUUID() },
     });
     return data;
   } catch (error) {

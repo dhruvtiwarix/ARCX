@@ -57,3 +57,24 @@ export async function getMe() {
 export function logout() {
   clearTokens();
 }
+
+export async function forgotPin() {
+  try {
+    const { data } = await client.post('/api/v1/auth/forgot-pin');
+    return data;
+  } catch (error) {
+    throw error.response?.data || error;
+  }
+}
+
+export async function resetPin(otp, newPin) {
+  try {
+    const { data } = await client.post('/api/v1/auth/reset-pin', {
+      otp: otp,
+      new_pin: newPin,
+    });
+    return data;
+  } catch (error) {
+    throw error.response?.data || error;
+  }
+}

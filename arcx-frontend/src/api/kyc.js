@@ -2,15 +2,14 @@ import client from './client';
 
 /**
  * Submit a KYC verification request.
- * @param {{tier: string, document_type: string, document_ref: string}} payload
+ * @param {{pan_number: string, pin: string}} payload
  * @returns {Promise<object>}
  */
 export async function submitKYC(payload) {
   try {
     const { data } = await client.post('/api/v1/kyc/submit', {
-      tier: payload.tier,
-      document_type: payload.document_type,
-      document_ref: payload.document_ref,
+      pan_number: payload.pan_number,
+      pin: payload.pin,
     });
     return data;
   } catch (error) {

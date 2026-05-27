@@ -111,41 +111,26 @@ class UserProfileSerializer(serializers.ModelSerializer):
 class KYCSubmitSerializer(serializers.Serializer):
     """
     POST /api/v1/kyc/submit
-
-    document_ref: The external ID returned by your KYC provider
-                  (DigiLocker, Onfido, CKYC, etc.).
-                  We never store the actual document — only this reference.
+    
+    pan_number: 10 character alphanumeric PAN.
+    pin:        6-digit transaction PIN set during KYC.
     """
-    tier = serializers.ChoiceField(choices=[
-        ("tier_1", "Tier 1 — Aadhaar OTP"),
-        ("tier_2", "Tier 2 — PAN + Selfie"),
-        ("tier_3", "Tier 3 — Full Address Proof"),
-    ])
-    document_type = serializers.ChoiceField(choices=[
-        ("aadhaar",  "Aadhaar Card"),
-        ("pan",      "PAN Card"),
-        ("passport", "Passport"),
-        ("dl",       "Driving License"),
-    ])
-    document_ref = serializers.CharField(
-        max_length  = 255,
-        help_text   = "External reference ID from KYC provider. Never send raw document data.",
+    pan_number = serializers.CharField(
+        max_length=10, 
+        min_length=10, 
+        help_text="10-character alphanumeric PAN"
+    )
+    pin = serializers.CharField(
+        max_length=6, 
+        min_length=6, 
+        help_text="Set your 6-digit transaction PIN during KYC verification."
     )
 
-    def validate(self, data):
-        """Ensure the document type makes sense for the tier."""
-        tier = data.get("tier")
-        doc  = data.get("document_type")
-
-        if tier == "tier_1" and doc not in ("aadhaar", "dl"):
-            raise serializers.ValidationError(
-                "Tier 1 accepts Aadhaar or Driving License only."
-            )
-        if tier == "tier_2" and doc not in ("pan", "passport"):
-            raise serializers.ValidationError(
-                "Tier 2 accepts PAN or Passport only."
-            )
-        return data
+    def validate_pan_number(self, value):
+        value = value.upper()
+        if not value.isalnum():
+            raise serializers.ValidationError("PAN must be alphanumeric.")
+        return value
 
 
 class LogoutRequestSerializer(serializers.Serializer):
@@ -158,3 +143,10 @@ class LogoutRequestSerializer(serializers.Serializer):
     in the simplejwt default setup.
     """
     refresh_token = serializers.CharField()
+
+class ResetPinRequestSerializer(serializers.Serializer):
+    """
+    POST /api/v1/auth/reset-pin/
+    """
+    otp = serializers.CharField(max_length=6, min_length=6, help_text="6-digit OTP received via email")
+    new_pin = serializers.CharField(max_length=6, min_length=6, help_text="New 6-digit transaction PIN")

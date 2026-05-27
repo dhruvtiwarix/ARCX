@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react'
 import { ArrowDownLeft, ArrowUpRight, Send, Clock, Loader2,
          CheckCircle2, XCircle, ArrowLeftRight, Landmark } from 'lucide-react'
+import { b2bApi } from '../api/b2b'
 import { walletApi, oracleApi } from '../api/index'
 import { useAuthStore } from '../store/authStore'
 import { format } from 'date-fns'
@@ -18,6 +19,7 @@ function ActionTabs({ active, onSelect }) {
     { id: 'deposit',  label: 'Deposit' },
     { id: 'withdraw', label: 'Withdraw' },
     { id: 'transfer', label: 'Transfer' },
+    { id: 'b2b', label: 'B2B (UPI)' },
   ]
   return (
     <div className="flex bg-slate-100 dark:bg-black/50 p-1 rounded-xl border border-black/5 dark:border-white/5 mb-6 transition-colors">
@@ -108,7 +110,7 @@ function TxRow({ tx }) {
 export default function WalletPage() {
   const { user, fetchMe } = useAuthStore()
   const [tab,     setTab]     = useState('deposit')
-  const [form,    setForm]    = useState({ amount_inr: '', amount_arcx: '', to_user_email: '', note: '' })
+  const [form,    setForm]    = useState({ amount_inr: '', amount_arcx: '', to_user_email: '', note: '', pin: '', alias: '' })
   const [flash,   setFlash]   = useState(null)
   const [loading, setLoading] = useState(false)
   const [txns,    setTxns]    = useState([])
@@ -139,56 +141,92 @@ export default function WalletPage() {
     } catch (_) {}
   }
 
-  useEffect(() => { loadHistory(); loadNav() }, [])
+  useEffect(() => { fetchMe(); loadHistory(); loadNav() }, [])
 
   const handleChange = e => setForm(p => ({ ...p, [e.target.name]: e.target.value }))
 
+  const extractError = (err) => {
+    if (!err) return null
+    // Could be pre-thrown object from wallet.js: err.error, err.pin, err.detail
+    if (err.error) return err.error
+    if (err.detail) return err.detail
+    if (err.pin) return Array.isArray(err.pin) ? err.pin[0] : err.pin
+    if (err.non_field_errors) return Array.isArray(err.non_field_errors) ? err.non_field_errors[0] : err.non_field_errors
+    // Axios response shape
+    const d = err.response?.data
+    if (!d) return null
+    if (d.error) return d.error
+    if (d.detail) return d.detail
+    if (d.pin) return Array.isArray(d.pin) ? d.pin[0] : d.pin
+    if (d.non_field_errors) return Array.isArray(d.non_field_errors) ? d.non_field_errors[0] : d.non_field_errors
+    // Last resort: stringify
+    if (typeof d === 'string') return d
+    return JSON.stringify(d)
+  }
+
   const handleDeposit = async e => {
     e.preventDefault()
-    if (!kyc_ok) return showFlash('err', 'Complete KYC before depositing.')
+    if (form.pin.length !== 6) return showFlash('err', '6-digit PIN required.')
     setLoading(true)
     try {
-      const d = await walletApi.deposit(form.amount_inr)
+      const d = await walletApi.deposit(form.amount_inr, form.pin)
       showFlash('ok', `Deposited! +${Number(d.arcx_credited).toFixed(6)} ARCX · NAV ₹${Number(d.nav_at_tx).toFixed(4)}`)
-      setForm(p => ({ ...p, amount_inr: '' }))
+      setForm(p => ({ ...p, amount_inr: '', pin: '' }))
       fetchMe(); loadHistory()
     } catch (err) {
-      showFlash('err', err.response?.data?.error || 'Deposit failed.')
+      showFlash('err', extractError(err) || 'Deposit failed.')
     }
     setLoading(false)
   }
 
   const handleWithdraw = async e => {
     e.preventDefault()
+    if (form.pin.length !== 6) return showFlash('err', '6-digit PIN required.')
     setLoading(true)
     try {
-      const d = await walletApi.withdraw(form.amount_arcx)
+      const d = await walletApi.withdraw(form.amount_arcx, form.pin)
       const fee = Number(d.fee_inr || 0)
       const net = Number(d.inr_returned)
       const feeStr = fee > 0 ? ` · Fee ₹${fee.toLocaleString('en-IN', { maximumFractionDigits: 2 })}` : ''
       showFlash('ok', `Instant withdrawal! ₹${net.toLocaleString('en-IN', { maximumFractionDigits: 2 })} credited to bank${feeStr}`)
-      setForm(p => ({ ...p, amount_arcx: '' }))
+      setForm(p => ({ ...p, amount_arcx: '', pin: '' }))
       fetchMe(); loadHistory()
     } catch (err) {
-      showFlash('err', err.response?.data?.error || 'Withdrawal failed.')
+      showFlash('err', extractError(err) || 'Withdrawal failed.')
     }
     setLoading(false)
   }
 
   const handleTransfer = async e => {
     e.preventDefault()
+    if (form.pin.length !== 6) return showFlash('err', '6-digit PIN required.')
     setLoading(true)
     try {
       await walletApi.transfer({
         to_user_email: form.to_user_email,
         amount_arcx:   form.amount_arcx,
         note:          form.note,
+        pin:           form.pin,
       }, genKey())
       showFlash('ok', `Sent ${form.amount_arcx} ARCX to ${form.to_user_email}. Fee: ₹0.00`)
-      setForm(p => ({ ...p, amount_arcx: '', to_user_email: '', note: '' }))
+      setForm(p => ({ ...p, amount_arcx: '', to_user_email: '', note: '', pin: '' }))
       fetchMe(); loadHistory()
     } catch (err) {
-      showFlash('err', err.response?.data?.error || 'Transfer failed.')
+      showFlash('err', extractError(err) || 'Transfer failed.')
+    }
+    setLoading(false)
+  }
+
+  const handleB2bTransfer = async e => {
+    e.preventDefault()
+    if (form.pin.length !== 6) return showFlash('err', '6-digit PIN required.')
+    setLoading(true)
+    try {
+      await b2bApi.transfer(form.alias, form.amount_arcx, form.pin, genKey())
+      showFlash('ok', `Transfer to ${form.alias} is processing...`)
+      setForm(p => ({ ...p, amount_arcx: '', alias: '', pin: '' }))
+    } catch (err) {
+      showFlash('err', err.response?.data?.error || err.response?.data?.pin?.[0] || 'Transfer failed.')
     }
     setLoading(false)
   }
@@ -262,12 +300,17 @@ export default function WalletPage() {
                     </p>
                   )}
                 </div>
-                {!kyc_ok && (
+                <div>
+                  <label className="block text-[11px] font-bold text-slate-500 uppercase tracking-widest mb-2">6-Digit PIN</label>
+                  <input className="w-full bg-slate-50 dark:bg-black/50 border border-black/10 dark:border-white/10 rounded-xl py-3 px-4 text-[#1D1D1F] dark:text-[#F5F5F7] placeholder:text-slate-400 dark:placeholder:text-slate-600 focus:outline-none focus:border-[#C5A059] dark:focus:border-arcx-gold transition-colors text-sm" 
+                         type="password" name="pin" value={form.pin} onChange={handleChange} maxLength="6" pattern="[0-9]{6}" placeholder="••••••" required />
+                </div>
+                {!kyc_ok && user && (
                   <p className="text-[11px] text-amber-600 dark:text-amber-400 bg-amber-50 dark:bg-amber-500/10 border border-amber-200 dark:border-amber-500/20 rounded-lg px-3 py-2 font-medium transition-colors">
                     KYC verification required to deposit.
                   </p>
                 )}
-                <button type="submit" className="w-full py-3.5 bg-[#1D1D1F] dark:bg-white text-white dark:text-black font-bold rounded-xl hover:bg-black dark:hover:bg-slate-200 transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2" disabled={loading || !kyc_ok}>
+                <button type="submit" className="w-full py-3.5 bg-[#1D1D1F] dark:bg-white text-white dark:text-black font-bold rounded-xl hover:bg-black dark:hover:bg-slate-200 transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2" disabled={loading}>
                   {loading ? <Loader2 size={18} className="animate-spin" /> : 'Deposit Funds'}
                 </button>
               </form>
@@ -306,6 +349,11 @@ export default function WalletPage() {
                     </div>
                   )}
                 </div>
+                <div>
+                  <label className="block text-[11px] font-bold text-slate-500 uppercase tracking-widest mb-2">6-Digit PIN</label>
+                  <input className="w-full bg-slate-50 dark:bg-black/50 border border-black/10 dark:border-white/10 rounded-xl py-3 px-4 text-[#1D1D1F] dark:text-[#F5F5F7] placeholder:text-slate-400 dark:placeholder:text-slate-600 focus:outline-none focus:border-[#C5A059] dark:focus:border-arcx-gold transition-colors text-sm" 
+                         type="password" name="pin" value={form.pin} onChange={handleChange} maxLength="6" pattern="[0-9]{6}" placeholder="••••••" required />
+                </div>
                 <button type="submit" className="w-full py-3.5 bg-[#1D1D1F] dark:bg-white text-white dark:text-black font-bold rounded-xl hover:bg-black dark:hover:bg-slate-200 transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2" disabled={loading}>
                   {loading ? <Loader2 size={18} className="animate-spin" /> : 'Withdraw Instantly via RTGS'}
                 </button>
@@ -327,8 +375,39 @@ export default function WalletPage() {
                     <span className="absolute right-4 top-1/2 -translate-y-1/2 text-slate-500 font-bold text-xs uppercase transition-colors">ARCX</span>
                   </div>
                 </div>
+                <div>
+                  <label className="block text-[11px] font-bold text-slate-500 uppercase tracking-widest mb-2">6-Digit PIN</label>
+                  <input className="w-full bg-slate-50 dark:bg-black/50 border border-black/10 dark:border-white/10 rounded-xl py-3 px-4 text-[#1D1D1F] dark:text-[#F5F5F7] placeholder:text-slate-400 dark:placeholder:text-slate-600 focus:outline-none focus:border-[#C5A059] dark:focus:border-arcx-gold transition-colors text-sm" 
+                         type="password" name="pin" value={form.pin} onChange={handleChange} maxLength="6" pattern="[0-9]{6}" placeholder="••••••" required />
+                </div>
                 <button type="submit" className="w-full py-3.5 bg-[#C5A059] dark:bg-arcx-gold text-white dark:text-black font-bold rounded-xl hover:bg-[#B38F48] dark:hover:bg-[#E5C009] transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2" disabled={loading}>
                   {loading ? <Loader2 size={18} className="animate-spin" /> : <><Send size={16} /> Send ARCX</>}
+                </button>
+              </form>
+            )}
+
+            {tab === 'b2b' && (
+              <form onSubmit={handleB2bTransfer} className="space-y-5 animate-fade-in">
+                <div>
+                  <label className="block text-[11px] font-bold text-slate-500 uppercase tracking-widest mb-2">Business Alias (VPA)</label>
+                  <input className="w-full bg-slate-50 dark:bg-black/50 border border-black/10 dark:border-white/10 rounded-xl py-3 px-4 text-[#1D1D1F] dark:text-[#F5F5F7] placeholder:text-slate-400 dark:placeholder:text-slate-600 focus:outline-none focus:border-[#C5A059] dark:focus:border-arcx-gold transition-colors text-sm" 
+                         type="text" name="alias" value={form.alias} onChange={handleChange} placeholder="vendor@arcx" required />
+                </div>
+                <div>
+                  <label className="block text-[11px] font-bold text-slate-500 uppercase tracking-widest mb-2">Amount (ARCX)</label>
+                  <div className="relative">
+                    <input className="w-full bg-slate-50 dark:bg-black/50 border border-black/10 dark:border-white/10 rounded-xl py-3 pl-4 pr-16 text-[#1D1D1F] dark:text-[#F5F5F7] placeholder:text-slate-400 dark:placeholder:text-slate-600 focus:outline-none focus:border-[#C5A059] dark:focus:border-arcx-gold transition-colors font-mono text-lg" 
+                           type="number" name="amount_arcx" value={form.amount_arcx} onChange={handleChange} placeholder="5.00" min="0.000001" step="0.000001" required />
+                    <span className="absolute right-4 top-1/2 -translate-y-1/2 text-slate-500 font-bold text-xs uppercase transition-colors">ARCX</span>
+                  </div>
+                </div>
+                <div>
+                  <label className="block text-[11px] font-bold text-slate-500 uppercase tracking-widest mb-2">6-Digit PIN</label>
+                  <input className="w-full bg-slate-50 dark:bg-black/50 border border-black/10 dark:border-white/10 rounded-xl py-3 px-4 text-[#1D1D1F] dark:text-[#F5F5F7] placeholder:text-slate-400 dark:placeholder:text-slate-600 focus:outline-none focus:border-[#C5A059] dark:focus:border-arcx-gold transition-colors text-sm" 
+                         type="password" name="pin" value={form.pin} onChange={handleChange} maxLength="6" pattern="[0-9]{6}" placeholder="••••••" required />
+                </div>
+                <button type="submit" className="w-full py-3.5 bg-[#1D1D1F] dark:bg-white text-white dark:text-black font-bold rounded-xl hover:bg-black dark:hover:bg-slate-200 transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2" disabled={loading}>
+                  {loading ? <Loader2 size={18} className="animate-spin" /> : 'Pay Instantly'}
                 </button>
               </form>
             )}

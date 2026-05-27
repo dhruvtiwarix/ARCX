@@ -34,11 +34,8 @@ from arcx_core.logger import arcx_logger, log_operation
 
 logger = logging.getLogger("arcx.wallet_service")
 
-KYC_DAILY_LIMITS_INR = {
-    "tier_1": Decimal("10000.00"),
-    "tier_2": Decimal("100000.00"),
-    "tier_3": Decimal("9999999.99"),
-}
+# Flat daily limit — KYC is now single-level (PAN only, no tiers)
+KYC_DAILY_LIMIT_INR = Decimal("100000.00")  # ₹1 Lakh/day
 
 
 class WalletService:
@@ -301,13 +298,7 @@ class WalletService:
         if wallet.user.kyc_status != User.KycStatus.APPROVED:
             raise KYCRequiredError("KYC approval required to transact.")
 
-        approved_kyc = wallet.user.kyc_records.filter(
-            status="approved",
-            deleted_at__isnull=True,
-        ).order_by("-tier").first()
-
-        tier_key    = approved_kyc.tier if approved_kyc else "tier_1"
-        daily_limit = KYC_DAILY_LIMITS_INR.get(tier_key, KYC_DAILY_LIMITS_INR["tier_1"])
+        daily_limit = KYC_DAILY_LIMIT_INR
 
         cutoff  = timezone.now() - timedelta(hours=24)
         tx_type = Transaction.TxType.DEPOSIT if direction == "deposit" else Transaction.TxType.WITHDRAW
@@ -326,6 +317,6 @@ class WalletService:
         if today_total + amount_inr > daily_limit:
             remaining = daily_limit - today_total
             raise KYCRequiredError(
-                f"Daily {direction} limit for your KYC tier is Rs.{daily_limit:,.2f}. "
-                f"You have Rs.{remaining:,.2f} remaining today."
+                f"Daily {direction} limit is ₹{daily_limit:,.2f}. "
+                f"You have ₹{remaining:,.2f} remaining today."
             )

@@ -42,6 +42,7 @@ from arcx_core.permissions import IsKYCApproved, IsWalletActive, IsCircuitBreake
 from arcx_core.serializers import TransferRequestSerializer
 from arcx_core.services.transfer_service import TransferService
 from arcx_core.services.wallet_service import WalletService
+from arcx_core.services.b2b_service import B2BService
 
 logger = logging.getLogger("arcx.views.transfer")
 
@@ -154,6 +155,9 @@ class TransferView(APIView):
         serializer.is_valid(raise_exception=True)
 
         data = serializer.validated_data
+
+        # 1. Validate UPI-Style PIN
+        B2BService.validate_transaction_pin(request.user, data["pin"])
 
         transfer_service = TransferService()
         tx = transfer_service.transfer(
