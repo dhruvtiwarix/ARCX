@@ -795,7 +795,7 @@ Mobile networks drop connections. Users double-tap buttons. Without idempotency,
 
 ## License
 
-MIT License — see [LICENSE](LICENSE) for details.
+AGPL-3.0 License — see [LICENSE](LICENSE) for details.
 
 <br />
 
