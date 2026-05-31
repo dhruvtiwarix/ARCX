@@ -1,4 +1,4 @@
-<div align="center">
+j<div align="center">
 
 <br />
 
@@ -23,7 +23,7 @@
 [![PostgreSQL](https://img.shields.io/badge/PostgreSQL-15-4169E1?style=flat-square&logo=postgresql&logoColor=white)](https://postgresql.org)
 [![Redis](https://img.shields.io/badge/Redis-7-DC382D?style=flat-square&logo=redis&logoColor=white)](https://redis.io)
 [![Docker](https://img.shields.io/badge/Docker-Compose-2496ED?style=flat-square&logo=docker&logoColor=white)](https://docker.com)
-[![License](https://img.shields.io/badge/License-MIT-lightgrey?style=flat-square)](LICENSE)
+[![License](https://img.shields.io/badge/License-AGPL_v3-blue?style=flat-square)](LICENSE)
 
 <br />
 
